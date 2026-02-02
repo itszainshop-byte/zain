@@ -9,8 +9,12 @@ WORKDIR /app
 # Copy manifests for layer caching (project-context)
 COPY package*.json ./
 
-# Install production dependencies
-RUN npm ci --omit=dev || npm ci --only=production
+# Install production dependencies (fallback to npm install if lock is out of sync)
+RUN if [ -f package-lock.json ]; then \
+			(npm ci --omit=dev || (echo "[warn] npm ci failed; removing lock and npm install --omit=dev" && rm -f package-lock.json && npm install --omit=dev)); \
+		else \
+			npm install --omit=dev; \
+		fi
 
 # Copy application source (project-context)
 COPY . ./
