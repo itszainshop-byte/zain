@@ -357,6 +357,7 @@ app.use((req, res) => {
 });
 
 const PORT = process.env.PORT || 8080;
+const HOST = process.env.HOST || '0.0.0.0';
 
 // Create HTTP server
 const server = createServer(app);
@@ -553,9 +554,12 @@ app.post('/api/realtime/test-broadcast', (req, res) => {
 const startServer = async () => {
   const startListening = () => {
     if (server.listening) return;
-    server.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log(`WebSocket server running on ws://localhost:${PORT}/ws`);
+    server.listen(PORT, HOST, () => {
+      console.log(`Server running on http://${HOST}:${PORT}`);
+      console.log(`WebSocket server running on ws://${HOST}:${PORT}/ws`);
+    });
+    server.on('error', (err) => {
+      console.error('[startup] Server listen error:', err?.message || err);
     });
   };
 
