@@ -30,6 +30,11 @@ const heroSchema = new mongoose.Schema({
     type: String,
     required: false
   },
+  // Optional: up to 4 products to show in hero offers
+  offerProductIds: {
+    type: [String],
+    default: []
+  },
   // Styling for primary CTA button
   primaryButtonBgColor: {
     type: String,
