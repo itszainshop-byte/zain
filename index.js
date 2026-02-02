@@ -551,12 +551,19 @@ app.post('/api/realtime/test-broadcast', (req, res) => {
 
 // Initialize server
 const startServer = async () => {
-  if (process.env.SKIP_DB === '1') {
-    console.warn('Starting server with SKIP_DB=1 (database connection skipped).');
+  const startListening = () => {
+    if (server.listening) return;
     server.listen(PORT, () => {
-      console.log(`Server running (no DB) on port ${PORT}`);
+      console.log(`Server running on port ${PORT}`);
       console.log(`WebSocket server running on ws://localhost:${PORT}/ws`);
     });
+  };
+
+  // Always start listening first (Cloud Run expects PORT to bind quickly)
+  startListening();
+
+  if (process.env.SKIP_DB === '1') {
+    console.warn('Starting server with SKIP_DB=1 (database connection skipped).');
     return;
   }
 
@@ -568,7 +575,7 @@ const startServer = async () => {
     console.error('Database connection failed after retries:', e.message);
   }
   if (!conn) {
-    console.error('Database connection failed; server not started. Set SKIP_DB=1 to bypass during development.');
+    console.error('Database connection failed; server running without DB. Set SKIP_DB=1 to bypass during development.');
     return;
   }
 
@@ -659,10 +666,8 @@ const startServer = async () => {
     console.warn('[startup] Payment session janitor start failed:', e?.message || e);
   }
 
-  server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`WebSocket server running on ws://localhost:${PORT}/ws`);
-  });
+  // Already listening; no-op if called again
+  startListening();
   try { startPushScheduler(app); console.log('[startup] Push scheduler started'); } catch {}
   try { startMcgSyncScheduler(); console.log('[startup] MCG auto-pull scheduler started'); } catch {}
 };
