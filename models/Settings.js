@@ -4,7 +4,7 @@ const settingsSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    default: 'Eva Curves Fashion Store'
+    default: 'zain'
   },
   email: {
     type: String,
@@ -309,7 +309,7 @@ const settingsSchema = new mongoose.Schema({
   // SEO settings
   siteTitle: {
     type: String,
-    default: 'Eva Curves Fashion Store'
+    default: 'zain'
   },
   siteDescription: {
     type: String,

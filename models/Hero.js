@@ -25,6 +25,11 @@ const heroSchema = new mongoose.Schema({
     type: String,
     default: 'Explore Lookbook'
   },
+  // Optional: product id for direct add-to-cart CTA
+  productId: {
+    type: String,
+    required: false
+  },
   // Styling for primary CTA button
   primaryButtonBgColor: {
     type: String,
