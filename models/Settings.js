@@ -359,6 +359,7 @@ const settingsSchema = new mongoose.Schema({
   scrollTopTextColor: { type: String, default: '' },
   scrollTopHoverBgColor: { type: String, default: '' },
   scrollTopPingColor: { type: String, default: '' },
+  scrollTopBackgroundImage: { type: String, default: '' },
   // Add To Cart button theme (persist so guests see admin design)
   atcBgColor: { type: String, default: '' },
   atcTextColor: { type: String, default: '' },
@@ -952,6 +953,7 @@ settingsSchema.statics.createDefaultSettings = async function() {
   ensureField('scrollTopTextColor', '');
   ensureField('scrollTopHoverBgColor', '');
   ensureField('scrollTopPingColor', '');
+  ensureField('scrollTopBackgroundImage', '');
       if (!settings.productCardStyle) {
         updateData.productCardStyle = 'modern';
         needsUpdate = true;

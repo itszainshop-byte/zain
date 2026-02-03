@@ -1215,6 +1215,7 @@ router.put('/', settingsWriteGuard, async (req, res) => {
             scrollTopTextColor: settings.scrollTopTextColor,
             scrollTopHoverBgColor: settings.scrollTopHoverBgColor,
             scrollTopPingColor: settings.scrollTopPingColor,
+            scrollTopBackgroundImage: settings.scrollTopBackgroundImage ? toAbsolute(req, settings.scrollTopBackgroundImage) : settings.scrollTopBackgroundImage,
             // Accessibility feature toggles
             a11y: settings.a11y,
             // SEO fields
@@ -1271,6 +1272,7 @@ router.put('/', settingsWriteGuard, async (req, res) => {
   if (savedObj.headerBackgroundImage && savedObj.headerBackgroundImage.startsWith('/uploads/')) savedObj.headerBackgroundImage = toAbsolute(req, savedObj.headerBackgroundImage);
   if (savedObj.navBackgroundImage && savedObj.navBackgroundImage.startsWith('/uploads/')) savedObj.navBackgroundImage = toAbsolute(req, savedObj.navBackgroundImage);
     if (savedObj.announcementsBackgroundImage && savedObj.announcementsBackgroundImage.startsWith('/uploads/')) savedObj.announcementsBackgroundImage = toAbsolute(req, savedObj.announcementsBackgroundImage);
+        if (savedObj.scrollTopBackgroundImage && savedObj.scrollTopBackgroundImage.startsWith('/uploads/')) savedObj.scrollTopBackgroundImage = toAbsolute(req, savedObj.scrollTopBackgroundImage);
       if (savedObj.storeBackgroundImage && savedObj.storeBackgroundImage.startsWith('/uploads/')) savedObj.storeBackgroundImage = toAbsolute(req, savedObj.storeBackgroundImage);
       if (savedObj.productDetailBackgroundImage && savedObj.productDetailBackgroundImage.startsWith('/uploads/')) savedObj.productDetailBackgroundImage = toAbsolute(req, savedObj.productDetailBackgroundImage);
       if (savedObj.productCardBackgroundImage && savedObj.productCardBackgroundImage.startsWith('/uploads/')) savedObj.productCardBackgroundImage = toAbsolute(req, savedObj.productCardBackgroundImage);
@@ -1930,6 +1932,68 @@ router.post('/upload/announcements-background', adminAuth, upload.single('file')
       const broadcast = req.app.get('broadcastToClients');
       if (typeof broadcast === 'function') {
         broadcast({ type: 'settings_updated', data: { announcementsBackgroundImage: toAbsolute(req, finalUrl) } });
+      }
+    } catch {}
+
+    res.json({ url: toAbsolute(req, finalUrl), stored: hasCloudinaryCreds ? 'cloudinary' : 'inline' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Upload scroll-to-top background image (admin only)
+router.post('/upload/scroll-top-background', adminAuth, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    let settings = await Settings.findOne();
+    if (!settings) settings = new Settings();
+
+    let finalUrl = `/uploads/${req.file.filename}`;
+    const hasCloudinaryCreds = await hasCloudinaryCredentials();
+    if (hasCloudinaryCreds) {
+      try {
+        await ensureCloudinaryConfig();
+        const uploadResult = await cloudinary.uploader.upload(path.join(uploadDir, req.file.filename), {
+          folder: 'settings/scroll-top',
+          resource_type: 'image',
+          use_filename: true,
+          unique_filename: false,
+          overwrite: true
+        });
+        if (uploadResult?.secure_url) {
+          finalUrl = uploadResult.secure_url;
+          try { fs.unlinkSync(path.join(uploadDir, req.file.filename)); } catch {}
+        }
+      } catch (cloudErr) {
+        console.warn('[scroll-top-background] Cloudinary upload failed, keeping local file:', cloudErr.message);
+      }
+    }
+
+    // Inline when no Cloudinary to persist across ephemeral storage
+    if (!hasCloudinaryCreds) {
+      try {
+        const filePath = path.join(uploadDir, req.file.filename);
+        const buf = fs.readFileSync(filePath);
+        const b64 = buf.toString('base64');
+        const mime = req.file.mimetype || 'image/png';
+        finalUrl = `data:${mime};base64,${b64}`;
+        try { fs.unlinkSync(filePath); } catch {}
+      } catch (inlineErr) {
+        console.warn('[scroll-top-background] Failed to inline image, using relative path:', inlineErr.message);
+      }
+    }
+
+    settings.scrollTopBackgroundImage = finalUrl;
+    await settings.save();
+
+    // Broadcast minimal update
+    try {
+      const broadcast = req.app.get('broadcastToClients');
+      if (typeof broadcast === 'function') {
+        broadcast({ type: 'settings_updated', data: { scrollTopBackgroundImage: toAbsolute(req, finalUrl) } });
       }
     } catch {}
 
