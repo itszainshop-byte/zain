@@ -293,6 +293,7 @@ const settingsSchema = new mongoose.Schema({
     }
   },
   // Product listing filter visibility toggles
+  showFilterBar: { type: Boolean, default: true }, // allow hiding entire filter sidebar/button
   showColorFilter: { type: Boolean, default: true }, // allow hiding color facet from storefront
   
   // Social media links
@@ -933,6 +934,10 @@ settingsSchema.statics.createDefaultSettings = async function() {
       }
       if (!settings.productGridStyle) {
         updateData.productGridStyle = 'standard';
+        needsUpdate = true;
+      }
+      if (typeof settings.showFilterBar === 'undefined') {
+        updateData.showFilterBar = true;
         needsUpdate = true;
       }
       if (typeof settings.showColorFilter === 'undefined') {

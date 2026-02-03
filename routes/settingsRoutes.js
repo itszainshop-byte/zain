@@ -1128,6 +1128,9 @@ router.put('/', settingsWriteGuard, async (req, res) => {
         try { settings.markModified('mobileHomeHeader'); } catch {}
       }
       // Simple boolean toggles
+      if (Object.prototype.hasOwnProperty.call(req.body, 'showFilterBar')) {
+        settings.showFilterBar = !!req.body.showFilterBar;
+      }
       if (Object.prototype.hasOwnProperty.call(req.body, 'showColorFilter')) {
         settings.showColorFilter = !!req.body.showColorFilter;
       }
@@ -1207,6 +1210,7 @@ router.put('/', settingsWriteGuard, async (req, res) => {
             footerStyle: settings.footerStyle,
             productCardStyle: settings.productCardStyle,
             productGridStyle: settings.productGridStyle,
+            showFilterBar: settings.showFilterBar,
             showColorFilter: settings.showColorFilter,
             // Component behavior
             heroAutoplayMs: settings.heroAutoplayMs,
