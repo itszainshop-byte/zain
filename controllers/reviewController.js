@@ -30,6 +30,32 @@ export const getAllReviews = async (req, res) => {
   }
 };
 
+// Get reviews for a single product (public)
+export const getProductReviews = async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+
+    const product = await Product.findById(req.params.id)
+      .populate({ path: 'reviews.user', select: 'name email image' })
+      .select('reviews');
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    const total = Array.isArray(product.reviews) ? product.reviews.length : 0;
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    const paged = (product.reviews || []).slice(start, end);
+
+    return res.json({ reviews: paged, total, page, limit });
+  } catch (error) {
+    console.error('Error fetching product reviews:', error);
+    return res.status(500).json({ message: 'Failed to fetch reviews' });
+  }
+};
+
 // Add review
 export const addReview = async (req, res) => {
   try {
