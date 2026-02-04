@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Product from '../models/Product.js';
+import Order from '../models/Order.js';
 import { Parser as Json2csvParser } from 'json2csv';
 // Get stock levels for a product or a specific generated variant.
 // Supported path patterns:
@@ -1088,6 +1089,17 @@ export const getProduct = async (req, res) => {
       } else {
         productObj._variantNotFound = true;
       }
+    }
+
+    try {
+      // Compute real buyers: number of completed orders that include this product
+      const realBuyers = await Order.countDocuments({ 'items.product': product._id, paymentStatus: 'completed' });
+      productObj.realBuyerCount = Number(realBuyers || 0);
+      const fake = Number(productObj.fakeBuyerCount || 0);
+      productObj.displayBuyerCount = fake + productObj.realBuyerCount;
+    } catch (e) {
+      // Non-fatal: log and continue without real buyer counts
+      try { console.warn('[getProduct] failed to compute real buyer count', e?.message || e); } catch {}
     }
 
     res.json(productObj);

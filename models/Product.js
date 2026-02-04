@@ -182,6 +182,12 @@ const productSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // Display-only fake buyer count (admin-managed promotional number)
+  fakeBuyerCount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   // Per-product size guide (دليل المقاسات)
   sizeGuide: {
     // Optional title (e.g., "Men's Shirts")
