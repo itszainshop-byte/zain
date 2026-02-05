@@ -80,10 +80,18 @@ export const updateOrder = async (req, res) => {
 
 // Create order
 export const createOrder = async (req, res) => {
-  const session = await mongoose.startSession();
-  let useTransaction = false;
+  const maxRetries = 2;
+  const isWriteConflict = (err) => {
+    const code = err?.code;
+    const labels = err?.errorLabels || err?.errorLabels || [];
+    const msg = String(err?.message || '');
+    return code === 112 || labels.includes('TransientTransactionError') || /WriteConflict/i.test(msg);
+  };
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const session = await mongoose.startSession();
+    let useTransaction = false;
 
-  try {
+    try {
     console.log('createOrder called with body:', JSON.stringify(req.body, null, 2));
     // Guard against SKIP_DB mode: meaningful error instead of opaque 500s when DB is intentionally disabled.
     if (process.env.SKIP_DB === '1') {
@@ -680,22 +688,37 @@ export const createOrder = async (req, res) => {
         })()
       }
     });
-  } catch (error) {
-    // Ensure transaction is aborted if still active
-    if (session.inTransaction()) {
-      await session.abortTransaction();
-    }
+    return;
+    } catch (error) {
+      // Ensure transaction is aborted if still active
+      if (session.inTransaction()) {
+        await session.abortTransaction();
+      }
 
-    console.error('Error creating order:', error);
-    const message = error?.message || 'Failed to create order';
-    res.status(500).json({
-      message,
-      error: message
-    });
-  } finally {
-    // End the session
-    await session.endSession();
+      if (isWriteConflict(error) && attempt < maxRetries) {
+        const delay = 50 * (attempt + 1);
+        console.warn('[createOrder] Write conflict, retrying', { attempt: attempt + 1, delay });
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      console.error('Error creating order:', error);
+      const message = error?.message || 'Failed to create order';
+      res.status(500).json({
+        message,
+        error: message
+      });
+      return;
+    } finally {
+      // End the session
+      await session.endSession();
+    }
   }
+
+  res.status(500).json({
+    message: 'Failed to create order after retries',
+    error: 'Write conflict retries exceeded'
+  });
 };
 
 // Get user orders

@@ -4,6 +4,15 @@ import { getPayPalClient, paypalSdk } from '../services/paypalClient.js';
 // Create a PayPal order based on a local Order document
 export const createPayPalOrder = async (req, res) => {
   try {
+    try {
+      console.log('[PayPal][create-order] incoming', {
+        time: new Date().toISOString(),
+        ip: req.ip,
+        ua: req.headers['user-agent'] || '',
+        hasAuth: !!req.headers.authorization,
+        orderId: req.body?.orderId || null
+      });
+    } catch {}
     const { orderId } = req.body;
     if (!orderId) return res.status(400).json({ message: 'orderId is required' });
 
@@ -37,6 +46,13 @@ export const createPayPalOrder = async (req, res) => {
     });
 
     const response = await client.execute(request);
+    try {
+      console.log('[PayPal][create-order] success', {
+        orderId,
+        paypalOrderId: response?.result?.id || null,
+        status: response?.result?.status || null
+      });
+    } catch {}
 
     // Save PayPal order id reference
     order.paymentMethod = 'paypal';
@@ -45,14 +61,29 @@ export const createPayPalOrder = async (req, res) => {
 
     res.json({ id: response.result.id, status: response.result.status, links: response.result.links });
   } catch (err) {
-    console.error('Error creating PayPal order:', err);
-    res.status(500).json({ message: 'Failed to create PayPal order' });
+    const debugId = err?.response?.headers?.['paypal-debug-id'] || err?.response?.headers?.['PayPal-Debug-Id'];
+    console.error('[PayPal][create-order] error', {
+      message: err?.message,
+      statusCode: err?.statusCode || err?.response?.status,
+      name: err?.name,
+      debugId
+    });
+    res.status(500).json({ message: 'Failed to create PayPal order', debugId });
   }
 };
 
 // Capture a PayPal order and mark local order paid
 export const capturePayPalOrder = async (req, res) => {
   try {
+    try {
+      console.log('[PayPal][capture-order] incoming', {
+        time: new Date().toISOString(),
+        ip: req.ip,
+        ua: req.headers['user-agent'] || '',
+        hasAuth: !!req.headers.authorization,
+        paypalOrderId: req.body?.paypalOrderId || null
+      });
+    } catch {}
     const { paypalOrderId } = req.body;
     if (!paypalOrderId) return res.status(400).json({ message: 'paypalOrderId is required' });
 
@@ -77,6 +108,13 @@ export const capturePayPalOrder = async (req, res) => {
       order.status = order.status === 'pending' ? 'processing' : order.status;
       order.paymentDetails = capture.result;
       await order.save();
+      try {
+        console.log('[PayPal][capture-order] completed', {
+          paypalOrderId,
+          orderId: order?._id?.toString(),
+          status
+        });
+      } catch {}
       return res.json({ message: 'Payment captured', orderId: order._id, status });
     }
 
@@ -84,9 +122,22 @@ export const capturePayPalOrder = async (req, res) => {
     order.paymentStatus = 'failed';
     order.paymentDetails = capture.result;
     await order.save();
+    try {
+      console.log('[PayPal][capture-order] not-completed', {
+        paypalOrderId,
+        orderId: order?._id?.toString(),
+        status
+      });
+    } catch {}
     return res.status(400).json({ message: 'Payment not completed', status });
   } catch (err) {
-    console.error('Error capturing PayPal order:', err);
-    res.status(500).json({ message: 'Failed to capture PayPal order' });
+    const debugId = err?.response?.headers?.['paypal-debug-id'] || err?.response?.headers?.['PayPal-Debug-Id'];
+    console.error('[PayPal][capture-order] error', {
+      message: err?.message,
+      statusCode: err?.statusCode || err?.response?.status,
+      name: err?.name,
+      debugId
+    });
+    res.status(500).json({ message: 'Failed to capture PayPal order', debugId });
   }
 };
