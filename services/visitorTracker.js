@@ -1,4 +1,6 @@
 const visitors = new Map();
+const events = [];
+const MAX_EVENTS = Number.parseInt(process.env.VISITOR_EVENTS_MAX || '200', 10);
 
 const DEFAULT_WINDOW_SEC = Number.parseInt(process.env.VISITOR_WINDOW_SEC || '300', 10);
 const DEFAULT_WINDOW_MS = Number.isFinite(DEFAULT_WINDOW_SEC) ? DEFAULT_WINDOW_SEC * 1000 : 300000;
@@ -33,6 +35,35 @@ export function trackVisitor({ id, ip, ua, path, referrer }) {
   });
   cleanup();
   return { ok: true, lastSeen: now };
+}
+
+const toSafeString = (value, max = 256) => (value == null ? '' : String(value).slice(0, max));
+
+export function trackEvent({ id, type, path, meta, ip, ua }) {
+  const visitorId = normalizeId(id);
+  if (!visitorId) return { ok: false };
+  const now = Date.now();
+  const event = {
+    id: `${visitorId}:${now}:${Math.random().toString(36).slice(2, 8)}`,
+    visitorId,
+    type: toSafeString(type, 64),
+    path: toSafeString(path, 256),
+    meta: meta && typeof meta === 'object' ? meta : undefined,
+    ip: toSafeString(ip, 64),
+    ua: toSafeString(ua, 256),
+    ts: now
+  };
+  events.unshift(event);
+  if (events.length > MAX_EVENTS) {
+    events.length = MAX_EVENTS;
+  }
+  trackVisitor({ id: visitorId, ip, ua, path, referrer: undefined });
+  return { ok: true, event };
+}
+
+export function getRecentEvents(limit = 50) {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 50, MAX_EVENTS));
+  return events.slice(0, safeLimit);
 }
 
 export function getActiveVisitorCount(windowMs = DEFAULT_WINDOW_MS) {
