@@ -1,6 +1,58 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
 const visitors = new Map();
 const events = [];
 const MAX_EVENTS = Number.parseInt(process.env.VISITOR_EVENTS_MAX || '200', 10);
+const SAVE_DEBOUNCE_MS = Number.parseInt(process.env.VISITOR_SAVE_DEBOUNCE_MS || '1000', 10);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const dataDir = path.resolve(__dirname, '../data');
+const dataFile = path.join(dataDir, 'visitor-state.json');
+let saveTimer = null;
+
+const safeJsonParse = (raw) => {
+  try { return JSON.parse(raw); } catch { return null; }
+};
+
+const loadState = () => {
+  try {
+    if (!fs.existsSync(dataFile)) return;
+    const raw = fs.readFileSync(dataFile, 'utf8');
+    const parsed = safeJsonParse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+    const list = Array.isArray(parsed.visitors) ? parsed.visitors : [];
+    list.forEach((v) => {
+      if (v && v.id) visitors.set(String(v.id), v);
+    });
+    const evts = Array.isArray(parsed.events) ? parsed.events : [];
+    events.length = 0;
+    evts.slice(0, MAX_EVENTS).forEach((e) => events.push(e));
+  } catch {}
+};
+
+const saveState = () => {
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+    const payload = {
+      visitors: Array.from(visitors.values()),
+      events: events.slice(0, MAX_EVENTS)
+    };
+    fs.writeFileSync(dataFile, JSON.stringify(payload));
+  } catch {}
+};
+
+const scheduleSave = () => {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    saveState();
+  }, Math.max(200, SAVE_DEBOUNCE_MS));
+};
+
+loadState();
 
 const DEFAULT_WINDOW_SEC = Number.parseInt(process.env.VISITOR_WINDOW_SEC || '300', 10);
 const DEFAULT_WINDOW_MS = Number.isFinite(DEFAULT_WINDOW_SEC) ? DEFAULT_WINDOW_SEC * 1000 : 300000;
@@ -34,6 +86,7 @@ export function trackVisitor({ id, ip, ua, path, referrer }) {
     referrer: (referrer || '').toString().slice(0, 256)
   });
   cleanup();
+  scheduleSave();
   return { ok: true, lastSeen: now };
 }
 
@@ -58,6 +111,7 @@ export function trackEvent({ id, type, path, meta, ip, ua }) {
     events.length = MAX_EVENTS;
   }
   trackVisitor({ id: visitorId, ip, ua, path, referrer: undefined });
+  scheduleSave();
   return { ok: true, event };
 }
 
