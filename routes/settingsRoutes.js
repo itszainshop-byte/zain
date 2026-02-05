@@ -2365,7 +2365,7 @@ router.post('/payments/paypal/test', adminAuth, async (req, res) => {
     // Simple auth test: get an access token via SDK by creating a minimal order and not executing
     const { getPayPalClient, paypalSdk } = await import('../services/paypalClient.js');
     try {
-      const client = getPayPalClient();
+      const client = await getPayPalClient();
       const request = new paypalSdk.orders.OrdersCreateRequest();
       request.prefer('return=representation');
       request.requestBody({ intent: 'CAPTURE', purchase_units: [{ amount: { currency_code: 'USD', value: '1.00' } }] });
