@@ -110,6 +110,14 @@ export const createOrder = async (req, res) => {
       });
     }
 
+    const blockPaypalDrafts = String(process.env.ALLOW_PAYPAL_ORDER_DRAFTS || 'false').toLowerCase() !== 'true';
+    if (blockPaypalDrafts && paymentMethod === 'paypal') {
+      return res.status(409).json({
+        message: 'PayPal orders are created only after payment is captured. Use /paypal/create-order and /paypal/capture-order instead of /orders.',
+        code: 'PAYPAL_PAYMENT_REQUIRES_SESSION'
+      });
+    }
+
     const couponInfo = (req.body?.coupon && req.body.coupon.code)
       ? { code: String(req.body.coupon.code).trim(), discount: Math.max(0, Number(req.body.coupon.discount) || 0) }
       : undefined;
