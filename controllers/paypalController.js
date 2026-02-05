@@ -1,4 +1,3 @@
-import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import PaymentSession from '../models/PaymentSession.js';
 import { getPayPalClient, paypalSdk } from '../services/paypalClient.js';
@@ -67,7 +66,7 @@ export const createPayPalOrder = async (req, res) => {
         ip: req.ip,
         ua: req.headers['user-agent'] || '',
         hasAuth: !!req.headers.authorization,
-        orderId: req.body?.orderId || null
+        hasCart: Array.isArray(req.body?.items) && req.body.items.length > 0
       });
     } catch {}
     const body = req.body || {};
