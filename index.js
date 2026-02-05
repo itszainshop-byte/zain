@@ -77,6 +77,7 @@ import zcreditRoutes from './routes/zcreditRoutes.js';
 import zcreditGatewayRoutes from './routes/zcreditGatewayRoutes.js';
 import mobilePushRoutes from './routes/mobilePushRoutes.js';
 import groomingRoutes from './routes/groomingRoutes.js';
+import visitorRoutes from './routes/visitorRoutes.js';
 // Lazy import function to warm DeepSeek config from DB
 import { loadDeepseekConfigFromDb } from './services/translate/deepseek.js';
 import { startPushScheduler } from './services/pushScheduler.js';
@@ -223,7 +224,7 @@ const buildZCreditDeepLinkHtml = (params = {}) => {
   const qp = [`status=${encodeURIComponent(status)}`];
   if (session) qp.push(`session=${encodeURIComponent(session)}`);
   if (orderNumber) qp.push(`order=${encodeURIComponent(orderNumber)}`);
-  const deepLink = `mypets://zcredit-return?${qp.join('&')}`;
+  const deepLink = `zains://zcredit-return?${qp.join('&')}`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -328,6 +329,7 @@ app.use('/api/zcredit', zcreditRoutes);
 app.use('/api/zcredit-gw', zcreditGatewayRoutes);
 app.use('/api/cancellation-requests', cancellationRequestRoutes);
 app.use('/api/grooming', groomingRoutes);
+app.use('/api/visitors', visitorRoutes);
 
 // Health Check Route
 app.get('/health', (req, res) => {
