@@ -17,6 +17,8 @@ const statusMappingSchema = new mongoose.Schema({
 
 const apiConfigurationSchema = new mongoose.Schema({
   baseUrl: { type: String, default: '' },
+  areaUrl: { type: String, default: '' },
+  subAreaUrl: { type: String, default: '' },
   authMethod: { type: String, enum: ['none', 'apiKey', 'basic', 'bearer'], default: 'none' },
   apiKey: { type: String },
   headers: { type: Map, of: String, default: {} },
