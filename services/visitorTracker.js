@@ -67,6 +67,7 @@ loadState();
 
 const DEFAULT_WINDOW_SEC = Number.parseInt(process.env.VISITOR_WINDOW_SEC || '300', 10);
 const DEFAULT_WINDOW_MS = Number.isFinite(DEFAULT_WINDOW_SEC) ? DEFAULT_WINDOW_SEC * 1000 : 300000;
+const DEFAULT_STREAM_URL = (process.env.VISITOR_STREAM_URL || 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8').toString();
 
 const normalizeId = (id) => {
   if (!id) return null;
@@ -218,7 +219,7 @@ export function getActiveVisitorList(windowMs = DEFAULT_WINDOW_MS) {
       path: record.path || '',
       referrer: record.referrer || '',
       ua: record.ua || '',
-      streamUrl: record.streamUrl || ''
+      streamUrl: record.streamUrl || DEFAULT_STREAM_URL
     });
   }
   list.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
