@@ -1,6 +1,6 @@
 import express from 'express';
 import { adminAuth } from '../middleware/auth.js';
-import { trackVisitor, getVisitorStats, trackEvent, getRecentEvents, getEventsCount } from '../services/visitorTracker.js';
+import { trackVisitor, getVisitorStats, trackEvent, getRecentEvents, getEventsCount, getActiveVisitorsByProduct } from '../services/visitorTracker.js';
 
 const router = express.Router();
 
@@ -78,6 +78,17 @@ router.get('/events', adminAuth, (req, res) => {
     res.json({ data, total: getEventsCount() });
   } catch (e) {
     res.status(500).json({ message: 'visitor_events_failed' });
+  }
+});
+
+router.get('/by-product', adminAuth, (req, res) => {
+  try {
+    const windowSec = Number.parseInt(String(req.query?.windowSec || ''), 10);
+    const windowMs = Number.isFinite(windowSec) ? windowSec * 1000 : undefined;
+    const data = getActiveVisitorsByProduct(windowMs);
+    res.json({ data, windowMs: windowMs || null, windowSec: windowMs ? Math.round(windowMs / 1000) : null });
+  } catch (e) {
+    res.status(500).json({ message: 'visitor_by_product_failed' });
   }
 });
 

@@ -138,3 +138,22 @@ export function getVisitorStats(windowMs = DEFAULT_WINDOW_MS) {
   const count = getActiveVisitorCount(windowMs);
   return { count, windowMs };
 }
+
+export function getActiveVisitorsByProduct(windowMs = DEFAULT_WINDOW_MS) {
+  cleanup(windowMs);
+  const cutoff = Date.now() - windowMs;
+  const map = new Map();
+  for (const record of visitors.values()) {
+    if (!record || record.lastSeen < cutoff) continue;
+    const path = (record.path || '').toString();
+    const match = /^\/product\/([^/?#]+)/.exec(path);
+    if (!match) continue;
+    const productId = match[1];
+    if (!productId) continue;
+    const entry = map.get(productId) || { count: 0, lastSeen: 0 };
+    entry.count += 1;
+    if (record.lastSeen > entry.lastSeen) entry.lastSeen = record.lastSeen;
+    map.set(productId, entry);
+  }
+  return Object.fromEntries(map.entries());
+}
