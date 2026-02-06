@@ -158,6 +158,10 @@ export const proxyExternalList = async (req, res) => {
     let derivedHeaders = {};
     let timeoutMs = 15000;
     let mergedQueryParams = (params && typeof params === 'object') ? params : undefined;
+    let apiConfiguration = {};
+    let credentials = {};
+    let jsonRpcPayload = null;
+    let isJsonRpc = false;
 
     const sanitizeHeaders = (input) => {
       const out = {};
@@ -183,8 +187,8 @@ export const proxyExternalList = async (req, res) => {
       if (!company) {
         return res.status(StatusCodes.NOT_FOUND).json({ message: 'Delivery company not found' });
       }
-      const apiConfiguration = company.apiConfiguration || {};
-      const credentials = company.credentials || {};
+      apiConfiguration = company.apiConfiguration || {};
+      credentials = company.credentials || {};
       const method = apiConfiguration.authMethod || 'none';
       derivedHeaders = sanitizeHeaders(apiConfiguration.headers || {});
       if (method === 'basic') {
@@ -206,17 +210,50 @@ export const proxyExternalList = async (req, res) => {
           ...(mergedQueryParams || {})
         };
       }
+
+      isJsonRpc = (apiConfiguration.format || company.apiFormat || '').toLowerCase() === 'jsonrpc';
     }
 
-    const response = await axios.get(trimmed, {
-      timeout: timeoutMs,
-      headers: {
-        ...derivedHeaders,
-        ...sanitizeHeaders((headers && typeof headers === 'object') ? headers : {})
-      },
-      auth,
-      params: mergedQueryParams,
-    });
+    if (isJsonRpc) {
+      const baseParams = (apiConfiguration.params && typeof apiConfiguration.params === 'object')
+        ? apiConfiguration.params
+        : {};
+      const mergedParams = {
+        ...baseParams,
+        ...(credentials.login ? { login: credentials.login } : {}),
+        ...(credentials.password ? { password: credentials.password } : {}),
+        ...(credentials.database ? { db: credentials.database } : {}),
+        ...((params && typeof params === 'object') ? params : {})
+      };
+
+      jsonRpcPayload = {
+        jsonrpc: '2.0',
+        ...(apiConfiguration.jsonrpcOmitMethod ? {} : (apiConfiguration.method ? { method: apiConfiguration.method } : {})),
+        params: mergedParams
+      };
+    }
+
+    const requestHeaders = {
+      ...derivedHeaders,
+      ...sanitizeHeaders((headers && typeof headers === 'object') ? headers : {})
+    };
+
+    const response = isJsonRpc
+      ? await axios.post(trimmed, jsonRpcPayload, {
+          timeout: timeoutMs,
+          headers: {
+            'Content-Type': 'application/json',
+            ...requestHeaders
+          },
+          auth,
+          params: mergedQueryParams,
+        })
+      : await axios.get(trimmed, {
+          timeout: timeoutMs,
+          headers: requestHeaders,
+          auth,
+          params: mergedQueryParams,
+        });
     res.json(response.data);
   } catch (e) {
     const status = e?.response?.status || StatusCodes.BAD_GATEWAY;
