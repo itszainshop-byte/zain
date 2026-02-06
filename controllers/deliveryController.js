@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import axios from 'axios';
 import DeliveryCompany from '../models/DeliveryCompany.js';
 import Order from '../models/Order.js';
 import { StatusCodes } from 'http-status-codes';
@@ -140,6 +141,29 @@ export const validateCompanyConfig = async (req, res) => {
     db: { effectiveDb: effectiveDb ?? null, sources },
     details: { authMethod, format, requiredParams }
   });
+};
+
+// Proxy external area/sub-area list fetch to avoid CORS in admin UI
+export const proxyExternalList = async (req, res) => {
+  const { url, headers } = req.body || {};
+  if (!url || typeof url !== 'string') {
+    return res.status(StatusCodes.BAD_REQUEST).json({ message: 'url is required' });
+  }
+  const trimmed = url.trim();
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Only http/https URLs are allowed' });
+  }
+  try {
+    const response = await axios.get(trimmed, {
+      timeout: 15000,
+      headers: (headers && typeof headers === 'object') ? headers : undefined,
+    });
+    res.json(response.data);
+  } catch (e) {
+    const status = e?.response?.status || StatusCodes.BAD_GATEWAY;
+    const message = e?.response?.data?.message || e?.message || 'Failed to fetch external list';
+    res.status(status).json({ message });
+  }
 };
 
 // Validate API configuration and show effective param resolution (e.g., db)

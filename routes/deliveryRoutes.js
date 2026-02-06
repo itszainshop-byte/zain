@@ -17,6 +17,7 @@ import {
   listDeliveryOrders,
   testConnection,
   validateCompanyConfig,
+  proxyExternalList,
   batchAssignOrders,
   batchSendOrders,
 } from '../controllers/deliveryController.js';
@@ -41,6 +42,9 @@ router.post('/companies/:id/test-connection', deliveryAdminGuard, testConnection
 // Validate config + show effective db sources
 router.get('/companies/:id/validate-config', deliveryAdminGuard, validateCompanyConfig);
 router.get('/companies/:id/validate-config', deliveryAdminGuard, validateCompanyConfig);
+
+// Proxy external list (areas/sub-areas) to avoid CORS in admin UI
+router.post('/proxy', deliveryAdminGuard, proxyExternalList);
 
 // Public companies listing for checkout
 router.get('/companies/public/active', listActiveCompanies);
