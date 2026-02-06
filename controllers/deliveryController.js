@@ -157,6 +157,7 @@ export const proxyExternalList = async (req, res) => {
     let auth;
     let derivedHeaders = {};
     let timeoutMs = 15000;
+    let mergedQueryParams = (params && typeof params === 'object') ? params : undefined;
 
     const sanitizeHeaders = (input) => {
       const out = {};
@@ -199,6 +200,12 @@ export const proxyExternalList = async (req, res) => {
         if (key) derivedHeaders[headerName] = key;
       }
       if (typeof apiConfiguration.timeoutMs === 'number') timeoutMs = apiConfiguration.timeoutMs;
+      if (apiConfiguration.queryParams && typeof apiConfiguration.queryParams === 'object') {
+        mergedQueryParams = {
+          ...(apiConfiguration.queryParams || {}),
+          ...(mergedQueryParams || {})
+        };
+      }
     }
 
     const response = await axios.get(trimmed, {
@@ -208,13 +215,20 @@ export const proxyExternalList = async (req, res) => {
         ...sanitizeHeaders((headers && typeof headers === 'object') ? headers : {})
       },
       auth,
-      params: (params && typeof params === 'object') ? params : undefined,
+      params: mergedQueryParams,
     });
     res.json(response.data);
   } catch (e) {
     const status = e?.response?.status || StatusCodes.BAD_GATEWAY;
-    const message = e?.response?.data?.message || e?.message || 'Failed to fetch external list';
-    res.status(status).json({ message });
+    const data = e?.response?.data;
+    const message =
+      (typeof data === 'string' ? data : null) ||
+      data?.message ||
+      data?.error ||
+      data?.detail ||
+      e?.message ||
+      'Failed to fetch external list';
+    res.status(status).json({ message, status, details: (data && typeof data === 'object') ? data : undefined });
   }
 };
 
