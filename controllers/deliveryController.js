@@ -242,9 +242,25 @@ export const proxyExternalList = async (req, res) => {
         requestOmitMethod === true;
     }
 
+    let effectiveUrl = trimmed;
     if (isJsonRpc) {
-      const effectiveMethod = requestMethod || apiConfiguration.method;
+      let effectiveMethod = requestMethod || apiConfiguration.method;
       const effectiveOmitMethod = requestJsonrpcOmitMethod ?? apiConfiguration.jsonrpcOmitMethod;
+
+      if (typeof effectiveMethod === 'string' && /^https?:\/\//i.test(effectiveMethod)) {
+        try {
+          const parsedMethodUrl = new URL(effectiveMethod);
+          const pathSegments = parsedMethodUrl.pathname.split('/').filter(Boolean);
+          const lastSegment = pathSegments[pathSegments.length - 1];
+          if (lastSegment) effectiveMethod = lastSegment;
+          if (effectiveUrl === effectiveMethod || effectiveUrl === parsedMethodUrl.toString()) {
+            const basePath = pathSegments.slice(0, -1).join('/');
+            effectiveUrl = `${parsedMethodUrl.origin}${basePath ? `/${basePath}` : ''}`;
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
       const baseParams = (apiConfiguration.params && typeof apiConfiguration.params === 'object')
         ? apiConfiguration.params
         : {};
@@ -269,7 +285,7 @@ export const proxyExternalList = async (req, res) => {
     };
 
     const response = isJsonRpc
-      ? await axios.post(trimmed, jsonRpcPayload, {
+      ? await axios.post(effectiveUrl, jsonRpcPayload, {
           timeout: timeoutMs,
           headers: {
             'Content-Type': 'application/json',
