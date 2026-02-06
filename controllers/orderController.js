@@ -337,16 +337,22 @@ export const createOrder = async (req, res) => {
       costComponents: []
     };
     const allowClientProvided = String(process.env.ALLOW_CLIENT_SHIPPING_FEE || 'true').toLowerCase() !== 'false';
-  const rawShippingFee = req.body?.shippingFee;
-  const rawClientShippingFee = req.body?.clientShippingFee;
-  const rawDeliveryFee = req.body?.deliveryFee;
-  const clientShippingFee = Number(rawShippingFee);
-  const clientAltFee = Number(rawClientShippingFee);
-  const clientDeliveryFee = Number(rawDeliveryFee);
-  const clientTotalWithShipping = Number(req.body?.totalWithShipping);
+    const rawShippingFee = req.body?.shippingFee;
+    const rawClientShippingFee = req.body?.clientShippingFee;
+    const rawDeliveryFee = req.body?.deliveryFee;
+    const clientShippingFee = Number(rawShippingFee);
+    const clientAltFee = Number(rawClientShippingFee);
+    const clientDeliveryFee = Number(rawDeliveryFee);
+    const clientTotalWithShipping = Number(req.body?.totalWithShipping);
     const clientProvidedValid = allowClientProvided && isFinite(clientShippingFee) && clientShippingFee > 0;
+    const explicitZeroProvided = allowClientProvided && [clientShippingFee, clientAltFee, clientDeliveryFee]
+      .some((v) => Number.isFinite(v) && v === 0);
+    const clientTotalIndicatesFree = !Number.isFinite(clientTotalWithShipping) || clientTotalWithShipping <= totalAmount;
+    const lockFreeShipping = explicitZeroProvided && clientTotalIndicatesFree;
 
-    if (clientProvidedValid) {
+    if (lockFreeShipping) {
+      shippingFee = 0;
+    } else if (clientProvidedValid) {
       shippingFee = clientShippingFee;
     } else if (allowClientProvided && isFinite(clientAltFee) && clientAltFee > 0) {
       // Fallback: some clients send clientShippingFee only
@@ -391,7 +397,7 @@ export const createOrder = async (req, res) => {
       }
     }
 
-    if (shippingFee === 0) {
+    if (!lockFreeShipping && shippingFee === 0) {
       // Attempt to infer from client totalWithShipping if provided
       if (clientTotalWithShipping && clientTotalWithShipping > totalAmount) {
         const inferred = clientTotalWithShipping - totalAmount;
@@ -399,14 +405,14 @@ export const createOrder = async (req, res) => {
       }
     }
 
-    if (shippingFee === 0) {
+    if (!lockFreeShipping && shippingFee === 0) {
       // Final fallback
       const fallback = Number(process.env.DEFAULT_SHIPPING_FEE || 50);
       if (isFinite(fallback) && fallback > 0) shippingFee = fallback;
     }
 
     // Last-chance rescue: if still 0 but any raw positive values were provided, take the maximum raw positive
-    if (shippingFee === 0) {
+    if (!lockFreeShipping && shippingFee === 0) {
       const candidates = [clientShippingFee, clientAltFee, clientDeliveryFee].filter(v => isFinite(v) && v > 0);
       if (candidates.length) {
         shippingFee = Math.max(...candidates);
@@ -416,7 +422,7 @@ export const createOrder = async (req, res) => {
 
   // Final assertion: log before create
   console.log('[ShippingResolution][Final]', { shippingFee, deliveryFeeMirror: shippingFee });
-  if (shippingFee === 0) {
+  if (!lockFreeShipping && shippingFee === 0) {
     const rawPositives = [rawShippingFee, rawClientShippingFee, rawDeliveryFee].map(v => Number(v)).filter(v => isFinite(v) && v > 0);
     if (rawPositives.length) {
       console.warn('[ShippingResolution][Anomaly] Raw positive fee(s) provided but computed/final shippingFee resolved to 0. Raw values:', {
@@ -428,7 +434,7 @@ export const createOrder = async (req, res) => {
     }
   }
   // Absolute final guard: if request body had a positive shippingFee value, force it.
-  if (shippingFee === 0 && isFinite(Number(rawShippingFee)) && Number(rawShippingFee) > 0) {
+  if (!lockFreeShipping && shippingFee === 0 && isFinite(Number(rawShippingFee)) && Number(rawShippingFee) > 0) {
     console.warn('[ShippingResolution][ForceFromRawBody] Forcing shippingFee from raw body value', { rawShippingFee });
     shippingFee = Number(rawShippingFee);
   }
