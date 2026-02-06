@@ -8,6 +8,8 @@ import {
   updateCompany,
   deleteCompany,
   updateFieldMappings,
+  getAreaMappings,
+  updateAreaMappings,
   calculateDeliveryFee,
   sendOrder,
   sendOrderWithOrderPayload,
@@ -38,6 +40,8 @@ router.get('/companies/:id', deliveryAdminGuard, getCompany);
 router.put('/companies/:id', deliveryAdminGuard, updateCompany);
 router.delete('/companies/:id', deliveryAdminGuard, deleteCompany);
 router.put('/companies/:id/field-mappings', deliveryAdminGuard, updateFieldMappings);
+router.get('/companies/:id/area-mappings', deliveryAdminGuard, getAreaMappings);
+router.put('/companies/:id/area-mappings', deliveryAdminGuard, updateAreaMappings);
 router.post('/companies/:id/test-connection', deliveryAdminGuard, testConnection);
 // Validate config + show effective db sources
 router.get('/companies/:id/validate-config', deliveryAdminGuard, validateCompanyConfig);
