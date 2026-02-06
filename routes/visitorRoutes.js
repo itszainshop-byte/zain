@@ -1,6 +1,6 @@
 import express from 'express';
 import { adminAuth } from '../middleware/auth.js';
-import { trackVisitor, getVisitorStats, trackEvent, getRecentEvents, getEventsCount, getActiveVisitorsByProduct, trackPageView } from '../services/visitorTracker.js';
+import { trackVisitor, getVisitorStats, trackEvent, getRecentEvents, getEventsCount, getActiveVisitorsByProduct, trackPageView, getActiveVisitorList } from '../services/visitorTracker.js';
 
 const router = express.Router();
 
@@ -63,6 +63,17 @@ router.get('/active', adminAuth, (req, res) => {
     res.json({ count: stats.count, windowMs: stats.windowMs, windowSec: Math.round(stats.windowMs / 1000) });
   } catch (e) {
     res.status(500).json({ message: 'visitor_stats_failed' });
+  }
+});
+
+router.get('/active/list', adminAuth, (req, res) => {
+  try {
+    const windowSec = Number.parseInt(String(req.query?.windowSec || ''), 10);
+    const windowMs = Number.isFinite(windowSec) ? windowSec * 1000 : undefined;
+    const data = getActiveVisitorList(windowMs);
+    res.json({ data, windowMs: windowMs || null, windowSec: windowMs ? Math.round(windowMs / 1000) : null });
+  } catch (e) {
+    res.status(500).json({ message: 'visitor_active_list_failed' });
   }
 });
 

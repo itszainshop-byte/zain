@@ -5,7 +5,9 @@ import Product from '../models/Product.js';
 
 const visitors = new Map();
 const events = [];
-const MAX_EVENTS = Number.parseInt(process.env.VISITOR_EVENTS_MAX || '200', 10);
+const MAX_EVENTS_RAW = Number.parseInt(process.env.VISITOR_EVENTS_MAX || '0', 10);
+const MAX_EVENTS = Number.isFinite(MAX_EVENTS_RAW) ? MAX_EVENTS_RAW : 0;
+const HAS_EVENT_CAP = MAX_EVENTS > 0;
 const SAVE_DEBOUNCE_MS = Number.parseInt(process.env.VISITOR_SAVE_DEBOUNCE_MS || '1000', 10);
 const productViewQueue = new Map();
 const lastPageViewByVisitor = new Map();
@@ -34,7 +36,11 @@ const loadState = () => {
     });
     const evts = Array.isArray(parsed.events) ? parsed.events : [];
     events.length = 0;
-    evts.slice(0, MAX_EVENTS).forEach((e) => events.push(e));
+    if (HAS_EVENT_CAP) {
+      evts.slice(0, MAX_EVENTS).forEach((e) => events.push(e));
+    } else {
+      evts.forEach((e) => events.push(e));
+    }
   } catch {}
 };
 
@@ -43,7 +49,7 @@ const saveState = () => {
     fs.mkdirSync(dataDir, { recursive: true });
     const payload = {
       visitors: Array.from(visitors.values()),
-      events: events.slice(0, MAX_EVENTS)
+      events: HAS_EVENT_CAP ? events.slice(0, MAX_EVENTS) : events
     };
     fs.writeFileSync(dataFile, JSON.stringify(payload));
   } catch {}
@@ -112,7 +118,7 @@ export function trackEvent({ id, type, path, meta, ip, ua }) {
     ts: now
   };
   events.unshift(event);
-  if (events.length > MAX_EVENTS) {
+  if (HAS_EVENT_CAP && events.length > MAX_EVENTS) {
     events.length = MAX_EVENTS;
   }
   trackVisitor({ id: visitorId, ip, ua, path, referrer: undefined });
@@ -171,7 +177,9 @@ export function trackPageView({ id, path, meta, ip, ua }) {
 }
 
 export function getRecentEvents(limit = 50) {
-  const safeLimit = Math.max(1, Math.min(Number(limit) || 50, MAX_EVENTS));
+  const parsed = Number(limit) || 50;
+  const maxAllowed = HAS_EVENT_CAP ? MAX_EVENTS : events.length || parsed;
+  const safeLimit = Math.max(1, Math.min(parsed, maxAllowed));
   return events.slice(0, safeLimit);
 }
 
@@ -192,6 +200,25 @@ export function getActiveVisitorCount(windowMs = DEFAULT_WINDOW_MS) {
 export function getVisitorStats(windowMs = DEFAULT_WINDOW_MS) {
   const count = getActiveVisitorCount(windowMs);
   return { count, windowMs };
+}
+
+export function getActiveVisitorList(windowMs = DEFAULT_WINDOW_MS) {
+  cleanup(windowMs);
+  const cutoff = Date.now() - windowMs;
+  const list = [];
+  for (const record of visitors.values()) {
+    if (!record || record.lastSeen < cutoff) continue;
+    list.push({
+      id: record.id,
+      shortId: String(record.id || '').slice(0, 8),
+      lastSeen: record.lastSeen,
+      path: record.path || '',
+      referrer: record.referrer || '',
+      ua: record.ua || ''
+    });
+  }
+  list.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+  return list;
 }
 
 export function getActiveVisitorsByProduct(windowMs = DEFAULT_WINDOW_MS) {
