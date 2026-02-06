@@ -211,7 +211,13 @@ export const proxyExternalList = async (req, res) => {
         };
       }
 
-      isJsonRpc = (apiConfiguration.format || company.apiFormat || '').toLowerCase() === 'jsonrpc';
+      const formatLower = String(apiConfiguration.format || company.apiFormat || '').toLowerCase();
+      isJsonRpc =
+        formatLower === 'jsonrpc' ||
+        formatLower === 'json-rpc' ||
+        formatLower === 'json' ||
+        Boolean(apiConfiguration.method) ||
+        apiConfiguration.jsonrpcOmitMethod === true;
     }
 
     if (isJsonRpc) {
