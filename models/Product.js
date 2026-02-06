@@ -194,6 +194,16 @@ const productSchema = new mongoose.Schema({
     default: true,
     index: true
   },
+  // Persistent total views for this product
+  visitorViewCount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  // Last time the product received a page view
+  visitorLastViewAt: {
+    type: Date
+  },
   // Per-product size guide (دليل المقاسات)
   sizeGuide: {
     // Optional title (e.g., "Men's Shirts")
