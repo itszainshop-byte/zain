@@ -84,17 +84,20 @@ const cleanup = (windowMs = DEFAULT_WINDOW_MS) => {
   }
 };
 
-export function trackVisitor({ id, ip, ua, path, referrer }) {
+export function trackVisitor({ id, ip, ua, path, referrer, streamUrl }) {
   const visitorId = normalizeId(id);
   if (!visitorId) return { ok: false };
   const now = Date.now();
+  const prev = visitors.get(visitorId) || {};
+  const nextStreamUrl = streamUrl ? toSafeString(streamUrl, 512) : prev.streamUrl;
   visitors.set(visitorId, {
     id: visitorId,
     lastSeen: now,
     ip: (ip || '').toString().slice(0, 64),
     ua: (ua || '').toString().slice(0, 256),
     path: (path || '').toString().slice(0, 256),
-    referrer: (referrer || '').toString().slice(0, 256)
+    referrer: (referrer || '').toString().slice(0, 256),
+    streamUrl: nextStreamUrl || ''
   });
   cleanup();
   scheduleSave();
@@ -214,7 +217,8 @@ export function getActiveVisitorList(windowMs = DEFAULT_WINDOW_MS) {
       lastSeen: record.lastSeen,
       path: record.path || '',
       referrer: record.referrer || '',
-      ua: record.ua || ''
+      ua: record.ua || '',
+      streamUrl: record.streamUrl || ''
     });
   }
   list.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));

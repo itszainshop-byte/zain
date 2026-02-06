@@ -8,8 +8,8 @@ router.post('/ping', (req, res) => {
   try {
     const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').toString().split(',')[0].trim();
     const ua = (req.headers['user-agent'] || '').toString();
-    const { visitorId, path, referrer, emitEvent } = req.body || {};
-    const result = trackVisitor({ id: visitorId, ip, ua, path, referrer });
+    const { visitorId, path, referrer, emitEvent, streamUrl } = req.body || {};
+    const result = trackVisitor({ id: visitorId, ip, ua, path, referrer, streamUrl });
     if (emitEvent) {
       try { trackPageView({ id: visitorId, path, meta: { source: 'ping' }, ip, ua }); } catch {}
     }
