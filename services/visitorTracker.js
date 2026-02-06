@@ -1,11 +1,16 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import Product from '../models/Product.js';
 
 const visitors = new Map();
 const events = [];
 const MAX_EVENTS = Number.parseInt(process.env.VISITOR_EVENTS_MAX || '200', 10);
 const SAVE_DEBOUNCE_MS = Number.parseInt(process.env.VISITOR_SAVE_DEBOUNCE_MS || '1000', 10);
+const productViewQueue = new Map();
+const lastPageViewByVisitor = new Map();
+const PAGE_VIEW_DEDUPE_MS = Number.parseInt(process.env.VISITOR_PAGE_VIEW_DEDUPE_MS || '60000', 10);
+let productFlushTimer = null;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -111,8 +116,58 @@ export function trackEvent({ id, type, path, meta, ip, ua }) {
     events.length = MAX_EVENTS;
   }
   trackVisitor({ id: visitorId, ip, ua, path, referrer: undefined });
+  if (event.type === 'page_view') {
+    const match = /^\/product\/([^/?#]+)/.exec(String(event.path || ''));
+    if (match) {
+      const productId = match[1];
+      const entry = productViewQueue.get(productId) || { count: 0, lastSeen: 0 };
+      entry.count += 1;
+      if (now > entry.lastSeen) entry.lastSeen = now;
+      productViewQueue.set(productId, entry);
+      scheduleProductFlush();
+    }
+  }
   scheduleSave();
   return { ok: true, event };
+}
+
+const scheduleProductFlush = () => {
+  if (productFlushTimer) return;
+  productFlushTimer = setTimeout(async () => {
+    productFlushTimer = null;
+    if (!productViewQueue.size) return;
+    const ops = [];
+    for (const [productId, entry] of productViewQueue.entries()) {
+      if (!productId || !entry?.count) continue;
+      ops.push({
+        updateOne: {
+          filter: { _id: productId },
+          update: {
+            $inc: { visitorViewCount: entry.count },
+            $set: { visitorLastViewAt: new Date(entry.lastSeen || Date.now()) }
+          }
+        }
+      });
+    }
+    productViewQueue.clear();
+    if (!ops.length) return;
+    try {
+      await Product.bulkWrite(ops, { ordered: false });
+    } catch {}
+  }, Math.max(500, SAVE_DEBOUNCE_MS));
+};
+
+export function trackPageView({ id, path, meta, ip, ua }) {
+  const visitorId = normalizeId(id);
+  if (!visitorId) return { ok: false };
+  const now = Date.now();
+  const currentPath = (path || '').toString();
+  const prev = lastPageViewByVisitor.get(visitorId);
+  if (prev && prev.path === currentPath && now - prev.ts < PAGE_VIEW_DEDUPE_MS) {
+    return { ok: false, suppressed: true };
+  }
+  lastPageViewByVisitor.set(visitorId, { path: currentPath, ts: now });
+  return trackEvent({ id: visitorId, type: 'page_view', path: currentPath, meta, ip, ua });
 }
 
 export function getRecentEvents(limit = 50) {

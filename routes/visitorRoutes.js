@@ -1,6 +1,6 @@
 import express from 'express';
 import { adminAuth } from '../middleware/auth.js';
-import { trackVisitor, getVisitorStats, trackEvent, getRecentEvents, getEventsCount, getActiveVisitorsByProduct } from '../services/visitorTracker.js';
+import { trackVisitor, getVisitorStats, trackEvent, getRecentEvents, getEventsCount, getActiveVisitorsByProduct, trackPageView } from '../services/visitorTracker.js';
 
 const router = express.Router();
 
@@ -8,8 +8,11 @@ router.post('/ping', (req, res) => {
   try {
     const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').toString().split(',')[0].trim();
     const ua = (req.headers['user-agent'] || '').toString();
-    const { visitorId, path, referrer } = req.body || {};
+    const { visitorId, path, referrer, emitEvent } = req.body || {};
     const result = trackVisitor({ id: visitorId, ip, ua, path, referrer });
+    if (emitEvent) {
+      try { trackPageView({ id: visitorId, path, meta: { source: 'ping' }, ip, ua }); } catch {}
+    }
     res.json({ ok: true, ...result });
   } catch (e) {
     res.status(500).json({ ok: false, message: 'visitor_ping_failed' });
