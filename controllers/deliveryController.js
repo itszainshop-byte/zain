@@ -77,6 +77,41 @@ export const updateFieldMappings = async (req, res) => {
   res.json({ message: 'Field mappings updated successfully' });
 };
 
+// Get area mappings for a company
+export const getAreaMappings = async (req, res) => {
+  const company = await DeliveryCompany.findById(req.params.id);
+  if (!company) return res.status(StatusCodes.NOT_FOUND).json({ message: 'Delivery company not found' });
+  res.json({ mappings: Array.isArray(company.areaMappings) ? company.areaMappings : [] });
+};
+
+// Update area mappings for a company
+export const updateAreaMappings = async (req, res) => {
+  const { mappings = [] } = req.body || {};
+  const company = await DeliveryCompany.findById(req.params.id);
+  if (!company) return res.status(StatusCodes.NOT_FOUND).json({ message: 'Delivery company not found' });
+
+  const sanitized = Array.isArray(mappings)
+    ? mappings.map((mapping) => {
+        const level = mapping?.level === 'subArea' ? 'subArea' : 'area';
+        const storeCities = Array.isArray(mapping?.storeCities)
+          ? mapping.storeCities.filter(c => typeof c === 'string' && c.trim()).map(c => c.trim())
+          : [];
+        return {
+          level,
+          areaId: typeof mapping?.areaId === 'string' ? mapping.areaId : '',
+          areaName: typeof mapping?.areaName === 'string' ? mapping.areaName : '',
+          subAreaId: typeof mapping?.subAreaId === 'string' ? mapping.subAreaId : '',
+          subAreaName: typeof mapping?.subAreaName === 'string' ? mapping.subAreaName : '',
+          storeCities,
+        };
+      }).filter(m => m.areaId && m.storeCities.length)
+    : [];
+
+  company.areaMappings = sanitized;
+  await company.save({ validateModifiedOnly: true });
+  res.json({ message: 'Area mappings updated successfully' });
+};
+
 // Calculate delivery fee (simple model: flat or by amount tiers)
 export const calculateDeliveryFee = async (req, res) => {
   const company = await DeliveryCompany.findById(req.params.id);

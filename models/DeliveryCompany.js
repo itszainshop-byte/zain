@@ -15,6 +15,15 @@ const statusMappingSchema = new mongoose.Schema({
   internalStatus: { type: String, required: true },
 }, { _id: false });
 
+const areaMappingSchema = new mongoose.Schema({
+  level: { type: String, enum: ['area', 'subArea'], default: 'area' },
+  areaId: { type: String, default: '' },
+  areaName: { type: String, default: '' },
+  subAreaId: { type: String, default: '' },
+  subAreaName: { type: String, default: '' },
+  storeCities: { type: [String], default: [] },
+}, { _id: false });
+
 const apiConfigurationSchema = new mongoose.Schema({
   baseUrl: { type: String, default: '' },
   areaUrl: { type: String, default: '' },
@@ -68,6 +77,7 @@ const deliveryCompanySchema = new mongoose.Schema({
   apiConfiguration: { type: apiConfigurationSchema, default: () => ({}) },
   fieldMappings: { type: [fieldMappingSchema], default: [] },
   statusMapping: { type: [statusMappingSchema], default: [] },
+  areaMappings: { type: [areaMappingSchema], default: [] },
   customFields: { type: mongoose.Schema.Types.Mixed, default: {} },
 }, { timestamps: true });
 
