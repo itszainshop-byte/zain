@@ -145,7 +145,16 @@ export const validateCompanyConfig = async (req, res) => {
 
 // Proxy external area/sub-area list fetch to avoid CORS in admin UI
 export const proxyExternalList = async (req, res) => {
-  const { url, headers, params, companyId, companyCode } = req.body || {};
+  const {
+    url,
+    headers,
+    params,
+    companyId,
+    companyCode,
+    format: requestFormat,
+    method: requestMethod,
+    jsonrpcOmitMethod: requestJsonrpcOmitMethod
+  } = req.body || {};
   if (!url || typeof url !== 'string') {
     return res.status(StatusCodes.BAD_REQUEST).json({ message: 'url is required' });
   }
@@ -211,16 +220,31 @@ export const proxyExternalList = async (req, res) => {
         };
       }
 
-      const formatLower = String(apiConfiguration.format || company.apiFormat || '').toLowerCase();
+      const formatLower = String(requestFormat || apiConfiguration.format || company.apiFormat || '').toLowerCase();
+      const effectiveMethod = requestMethod || apiConfiguration.method;
+      const effectiveOmitMethod = requestJsonrpcOmitMethod ?? apiConfiguration.jsonrpcOmitMethod;
       isJsonRpc =
         formatLower === 'jsonrpc' ||
         formatLower === 'json-rpc' ||
         formatLower === 'json' ||
-        Boolean(apiConfiguration.method) ||
-        apiConfiguration.jsonrpcOmitMethod === true;
+        Boolean(effectiveMethod) ||
+        effectiveOmitMethod === true;
+    }
+
+    if (!isJsonRpc) {
+      const requestFormatLower = String(requestFormat || '').toLowerCase();
+      const requestOmitMethod = requestJsonrpcOmitMethod === true;
+      isJsonRpc =
+        requestFormatLower === 'jsonrpc' ||
+        requestFormatLower === 'json-rpc' ||
+        requestFormatLower === 'json' ||
+        Boolean(requestMethod) ||
+        requestOmitMethod === true;
     }
 
     if (isJsonRpc) {
+      const effectiveMethod = requestMethod || apiConfiguration.method;
+      const effectiveOmitMethod = requestJsonrpcOmitMethod ?? apiConfiguration.jsonrpcOmitMethod;
       const baseParams = (apiConfiguration.params && typeof apiConfiguration.params === 'object')
         ? apiConfiguration.params
         : {};
@@ -234,7 +258,7 @@ export const proxyExternalList = async (req, res) => {
 
       jsonRpcPayload = {
         jsonrpc: '2.0',
-        ...(apiConfiguration.jsonrpcOmitMethod ? {} : (apiConfiguration.method ? { method: apiConfiguration.method } : {})),
+        ...(effectiveOmitMethod ? {} : (effectiveMethod ? { method: effectiveMethod } : {})),
         params: mergedParams
       };
     }
