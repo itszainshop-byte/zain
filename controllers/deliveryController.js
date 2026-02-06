@@ -158,6 +158,23 @@ export const proxyExternalList = async (req, res) => {
     let derivedHeaders = {};
     let timeoutMs = 15000;
 
+    const sanitizeHeaders = (input) => {
+      const out = {};
+      if (!input || typeof input !== 'object') return out;
+      for (const [rawKey, rawValue] of Object.entries(input)) {
+        if (!rawKey) continue;
+        const key = String(rawKey).trim();
+        if (!key || key.startsWith('$')) continue;
+        if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(key)) continue;
+        if (rawValue === undefined || rawValue === null) continue;
+        const value = Array.isArray(rawValue) ? rawValue.join(',') : String(rawValue);
+        if (!value || /[\r\n]/.test(value)) continue;
+        if (value.includes('$__')) continue;
+        out[key] = value;
+      }
+      return out;
+    };
+
     if (companyId || companyCode) {
       const company = companyId
         ? await DeliveryCompany.findById(companyId)
@@ -168,7 +185,7 @@ export const proxyExternalList = async (req, res) => {
       const apiConfiguration = company.apiConfiguration || {};
       const credentials = company.credentials || {};
       const method = apiConfiguration.authMethod || 'none';
-      derivedHeaders = { ...(apiConfiguration.headers || {}) };
+      derivedHeaders = sanitizeHeaders(apiConfiguration.headers || {});
       if (method === 'basic') {
         const username = apiConfiguration.username || credentials.username;
         const password = apiConfiguration.password || credentials.password;
@@ -188,7 +205,7 @@ export const proxyExternalList = async (req, res) => {
       timeout: timeoutMs,
       headers: {
         ...derivedHeaders,
-        ...((headers && typeof headers === 'object') ? headers : {})
+        ...sanitizeHeaders((headers && typeof headers === 'object') ? headers : {})
       },
       auth,
       params: (params && typeof params === 'object') ? params : undefined,
