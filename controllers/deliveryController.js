@@ -145,7 +145,7 @@ export const validateCompanyConfig = async (req, res) => {
 
 // Proxy external area/sub-area list fetch to avoid CORS in admin UI
 export const proxyExternalList = async (req, res) => {
-  const { url, headers } = req.body || {};
+  const { url, headers, params, companyId, companyCode } = req.body || {};
   if (!url || typeof url !== 'string') {
     return res.status(StatusCodes.BAD_REQUEST).json({ message: 'url is required' });
   }
@@ -154,9 +154,44 @@ export const proxyExternalList = async (req, res) => {
     return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Only http/https URLs are allowed' });
   }
   try {
+    let auth;
+    let derivedHeaders = {};
+    let timeoutMs = 15000;
+
+    if (companyId || companyCode) {
+      const company = companyId
+        ? await DeliveryCompany.findById(companyId)
+        : await DeliveryCompany.findOne({ code: companyCode });
+      if (!company) {
+        return res.status(StatusCodes.NOT_FOUND).json({ message: 'Delivery company not found' });
+      }
+      const apiConfiguration = company.apiConfiguration || {};
+      const credentials = company.credentials || {};
+      const method = apiConfiguration.authMethod || 'none';
+      derivedHeaders = { ...(apiConfiguration.headers || {}) };
+      if (method === 'basic') {
+        const username = apiConfiguration.username || credentials.username;
+        const password = apiConfiguration.password || credentials.password;
+        if (username || password) auth = { username, password };
+      } else if (method === 'bearer') {
+        const token = apiConfiguration.bearer || apiConfiguration.apiKey || credentials.token || credentials.apiKey;
+        if (token) derivedHeaders.Authorization = `Bearer ${token}`;
+      } else if (method === 'apiKey') {
+        const key = apiConfiguration.apiKey || credentials.apiKey;
+        const headerName = credentials.apiKeyHeader || apiConfiguration.apiKeyHeader || process.env.DELIVERY_HUB_API_KEY_HEADER || 'x-api-key';
+        if (key) derivedHeaders[headerName] = key;
+      }
+      if (typeof apiConfiguration.timeoutMs === 'number') timeoutMs = apiConfiguration.timeoutMs;
+    }
+
     const response = await axios.get(trimmed, {
-      timeout: 15000,
-      headers: (headers && typeof headers === 'object') ? headers : undefined,
+      timeout: timeoutMs,
+      headers: {
+        ...derivedHeaders,
+        ...((headers && typeof headers === 'object') ? headers : {})
+      },
+      auth,
+      params: (params && typeof params === 'object') ? params : undefined,
     });
     res.json(response.data);
   } catch (e) {
