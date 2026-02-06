@@ -210,6 +210,10 @@ export function buildPayloadFromMappings(order, company) {
       const digits = asStr.replace(/\D+/g, '');
       // Keep last 10 digits, common rule for local mobile numbers
       value = digits.length > 10 ? digits.slice(-10) : digits;
+    } else if (m.transform === 'paid_online') {
+      const status = String(getByPath(order, 'paymentStatus') || '').toLowerCase();
+      const method = String(getByPath(order, 'paymentMethod') || '').toLowerCase();
+      value = status === 'completed' && (method === 'card' || method === 'paypal');
     } else if (m.transform === 'to_string' && value !== undefined && value !== null) {
       value = String(value);
     } else if (m.transform === 'to_number' && value !== undefined && value !== null) {
