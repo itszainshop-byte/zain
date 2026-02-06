@@ -1,6 +1,6 @@
 import express from 'express';
 import { adminAuth } from '../middleware/auth.js';
-import { trackVisitor, getVisitorStats, trackEvent, getRecentEvents } from '../services/visitorTracker.js';
+import { trackVisitor, getVisitorStats, trackEvent, getRecentEvents, getEventsCount } from '../services/visitorTracker.js';
 
 const router = express.Router();
 
@@ -21,7 +21,21 @@ router.post('/event', (req, res) => {
     const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').toString().split(',')[0].trim();
     const ua = (req.headers['user-agent'] || '').toString();
     const { visitorId, type, path, meta } = req.body || {};
-    const allowed = new Set(['page_view', 'click', 'cart_add', 'cart_remove', 'cart_update_qty', 'cart_clear']);
+    const allowed = new Set([
+      'page_view',
+      'click',
+      'cart_add',
+      'cart_remove',
+      'cart_update_qty',
+      'cart_clear',
+      'search',
+      'checkout_start',
+      'checkout_step',
+      'checkout_shipping_submit',
+      'checkout_complete',
+      'wishlist_add_to_cart',
+      'wishlist_remove'
+    ]);
     const safeType = allowed.has(String(type)) ? String(type) : 'unknown';
     const result = trackEvent({ id: visitorId, type: safeType, path, meta, ip, ua });
     if (result?.event) {
@@ -61,7 +75,7 @@ router.get('/events', adminAuth, (req, res) => {
       meta: event.meta,
       ts: event.ts
     }));
-    res.json({ data });
+    res.json({ data, total: getEventsCount() });
   } catch (e) {
     res.status(500).json({ message: 'visitor_events_failed' });
   }

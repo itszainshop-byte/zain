@@ -120,6 +120,10 @@ export function getRecentEvents(limit = 50) {
   return events.slice(0, safeLimit);
 }
 
+export function getEventsCount() {
+  return events.length;
+}
+
 export function getActiveVisitorCount(windowMs = DEFAULT_WINDOW_MS) {
   cleanup(windowMs);
   const cutoff = Date.now() - windowMs;
