@@ -188,6 +188,12 @@ const productSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  // Per-product visitor counter enable/disable (admin controlled)
+  visitorCounterEnabled: {
+    type: Boolean,
+    default: true,
+    index: true
+  },
   // Per-product size guide (دليل المقاسات)
   sizeGuide: {
     // Optional title (e.g., "Men's Shirts")
