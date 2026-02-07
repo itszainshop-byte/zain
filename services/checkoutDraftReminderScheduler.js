@@ -1,3 +1,4 @@
+import axios from 'axios';
 import CheckoutDraft from '../models/CheckoutDraft.js';
 import Settings from '../models/Settings.js';
 
@@ -43,6 +44,42 @@ const buildWhatsappLink = (phone, message) => {
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 };
 
+const normalizeE164 = (phone) => {
+  const raw = String(phone || '').trim();
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+  return `+${digits}`;
+};
+
+const normalizeWhatsAppAddress = (phone) => {
+  const e164 = normalizeE164(phone);
+  if (!e164) return '';
+  return `whatsapp:${e164}`;
+};
+
+const normalizeFromAddress = (from) => {
+  const raw = String(from || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('whatsapp:')) return raw;
+  if (raw.startsWith('+')) return `whatsapp:${raw}`;
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+  return `whatsapp:+${digits}`;
+};
+
+const sendWhatsAppViaTwilio = async ({ accountSid, authToken, from, to, body }) => {
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+  const payload = new URLSearchParams();
+  payload.set('From', from);
+  payload.set('To', to);
+  payload.set('Body', body);
+  const response = await axios.post(url, payload.toString(), {
+    auth: { username: accountSid, password: authToken },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+  });
+  return response?.data || null;
+};
+
 export function startCheckoutDraftReminderScheduler() {
   if (timer) return;
 
@@ -68,25 +105,44 @@ export function startCheckoutDraftReminderScheduler() {
       if (!due.length) return;
 
       const settings = await getSettings();
-      const template = settings?.reminderMessageTemplate || '';
-      const checkoutUrl = settings?.reminderCheckoutUrl || '';
-      const discountCode = settings?.reminderDiscountCode || '';
+      const cf = settings?.checkoutForm || {};
+      const template = cf.reminderMessageTemplate || '';
+      const checkoutUrl = cf.reminderCheckoutUrl || '';
+      const discountCode = cf.reminderDiscountCode || '';
+      const whatsappEnabled = !!cf.reminderWhatsAppEnabled;
+      const accountSid = String(cf.twilioAccountSid || '').trim();
+      const authToken = String(cf.twilioAuthToken || '').trim();
+      const from = normalizeFromAddress(cf.twilioWhatsAppFrom || '');
+
+      if (!whatsappEnabled || !accountSid || !authToken || !from) {
+        console.warn('[reminder] Twilio WhatsApp not configured; skipping auto reminders');
+        return;
+      }
 
       for (const draft of due) {
         try {
           const phone = resolvePhone(draft);
+          const to = normalizeWhatsAppAddress(phone);
+          if (!to) continue;
           const message = buildMessage(template, resolveName(draft), discountCode, checkoutUrl);
-          const link = buildWhatsappLink(phone, message);
-          if (!link) continue;
 
-          const note = `Auto WhatsApp reminder: ${link}`;
+          const result = await sendWhatsAppViaTwilio({
+            accountSid,
+            authToken,
+            from,
+            to,
+            body: message
+          });
+
+          const link = buildWhatsappLink(phone, message);
+          const note = `Auto WhatsApp sent (Twilio): ${result?.sid || 'unknown'}${link ? `\n${link}` : ''}`;
           draft.lastReminderAt = new Date();
           draft.lastReminderChannel = 'whatsapp-auto';
           draft.reminderCount = Number(draft.reminderCount || 0) + 1;
           draft.reminderNote = draft.reminderNote ? `${draft.reminderNote}\n${note}` : note;
           await draft.save();
 
-          console.log('[reminder] WhatsApp link generated', { id: draft._id, link });
+          console.log('[reminder] WhatsApp sent via Twilio', { id: draft._id, sid: result?.sid || '' });
         } catch (e) {
           console.warn('[reminder] Failed to process draft', draft?._id, e?.message || e);
         }
