@@ -26,6 +26,7 @@ import warehouseMovementRoutes from './warehouseMovementRoutes.js';
 import giftCardRoutes from './giftCardRoutes.js';
 import couponRoutes from './couponRoutes.js';
 import recipientRoutes from './recipientRoutes.js';
+import checkoutDraftRoutes from './checkoutDraftRoutes.js';
 
 const router = express.Router();
 
@@ -55,5 +56,6 @@ router.use('/warehouse-movements', warehouseMovementRoutes);
 router.use('/gift-cards', giftCardRoutes);
 router.use('/coupons', couponRoutes);
 router.use('/recipients', recipientRoutes);
+router.use('/checkout-drafts', checkoutDraftRoutes);
 
 export default router;

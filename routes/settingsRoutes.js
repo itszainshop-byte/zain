@@ -2313,6 +2313,9 @@ router.get('/checkout', async (req, res) => {
       showSecondaryMobile: !!cf.showSecondaryMobile,
       showCountry: !!cf.showCountry,
       allowOtherCity: !!cf.allowOtherCity,
+      reminderMessageTemplate: typeof cf.reminderMessageTemplate === 'string' ? cf.reminderMessageTemplate : '',
+      reminderCheckoutUrl: typeof cf.reminderCheckoutUrl === 'string' ? cf.reminderCheckoutUrl : '',
+      reminderDiscountCode: typeof cf.reminderDiscountCode === 'string' ? cf.reminderDiscountCode : '',
       cities: cityList,
       cityTable
     });
@@ -2324,7 +2327,7 @@ router.get('/checkout', async (req, res) => {
 // Update checkout form (guarded; can be relaxed via env)
 router.put('/checkout', settingsWriteGuard, async (req, res) => {
   try {
-    const { showEmail, showLastName, showSecondaryMobile, showCountry, cities, allowOtherCity, allowGuestCheckout, cityTable } = req.body || {};
+    const { showEmail, showLastName, showSecondaryMobile, showCountry, cities, allowOtherCity, allowGuestCheckout, cityTable, reminderMessageTemplate, reminderCheckoutUrl, reminderDiscountCode } = req.body || {};
     let settings = await Settings.findOne();
     if (!settings) settings = new Settings();
     settings.checkoutForm = settings.checkoutForm || {};
@@ -2334,6 +2337,9 @@ router.put('/checkout', settingsWriteGuard, async (req, res) => {
     if (typeof showCountry === 'boolean') settings.checkoutForm.showCountry = showCountry;
   if (typeof allowGuestCheckout === 'boolean') settings.checkoutForm.allowGuestCheckout = allowGuestCheckout;
     if (typeof allowOtherCity === 'boolean') settings.checkoutForm.allowOtherCity = allowOtherCity;
+    if (typeof reminderMessageTemplate === 'string') settings.checkoutForm.reminderMessageTemplate = reminderMessageTemplate;
+    if (typeof reminderCheckoutUrl === 'string') settings.checkoutForm.reminderCheckoutUrl = reminderCheckoutUrl;
+    if (typeof reminderDiscountCode === 'string') settings.checkoutForm.reminderDiscountCode = reminderDiscountCode;
     if (Array.isArray(cityTable)) {
       const normalized = cityTable
         .map(entry => normalizeCityRow(entry))
