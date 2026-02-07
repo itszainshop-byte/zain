@@ -104,7 +104,7 @@ export const updateAreaMappings = async (req, res) => {
           subAreaName: typeof mapping?.subAreaName === 'string' ? mapping.subAreaName : '',
           storeCities,
         };
-      }).filter(m => m.areaId && m.storeCities.length)
+      }).filter(m => (m.level === 'subArea' ? m.subAreaId : m.areaId) && m.storeCities.length)
     : [];
 
   company.areaMappings = sanitized;
