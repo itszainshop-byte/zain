@@ -83,6 +83,7 @@ import { loadDeepseekConfigFromDb } from './services/translate/deepseek.js';
 import { startPushScheduler } from './services/pushScheduler.js';
 import { startMcgSyncScheduler } from './services/mcgSyncScheduler.js';
 import { startPaymentSessionJanitor } from './services/paymentSessionJanitor.js';
+import { startCheckoutDraftReminderScheduler } from './services/checkoutDraftReminderScheduler.js';
 
 // Path Setup
 const __filename = fileURLToPath(import.meta.url);
@@ -676,6 +677,7 @@ const startServer = async () => {
   startListening();
   try { startPushScheduler(app); console.log('[startup] Push scheduler started'); } catch {}
   try { startMcgSyncScheduler(); console.log('[startup] MCG auto-pull scheduler started'); } catch {}
+  try { startCheckoutDraftReminderScheduler(); console.log('[startup] Checkout reminder scheduler started'); } catch {}
 };
 
 // Start server
