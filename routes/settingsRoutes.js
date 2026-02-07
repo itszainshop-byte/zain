@@ -283,6 +283,13 @@ router.get('/', async (req, res) => {
         model: obj.translations.deepseek.model || ''
       };
     }
+    // Mask Twilio credentials if present under checkout form
+    if (obj.checkoutForm) {
+      obj.checkoutForm = { ...obj.checkoutForm };
+      if (obj.checkoutForm.twilioAccountSid) obj.checkoutForm.twilioAccountSid = '***';
+      if (obj.checkoutForm.twilioAuthToken) obj.checkoutForm.twilioAuthToken = '***';
+      if (obj.checkoutForm.twilioWhatsAppFrom) obj.checkoutForm.twilioWhatsAppFrom = '***';
+    }
     // Normalize favicon (and optionally logo) to absolute so other-origins (Netlify) can load it
     try {
   if (obj.favicon) obj.favicon = toAbsolute(req, obj.favicon);
@@ -2352,6 +2359,43 @@ router.put('/checkout', settingsWriteGuard, async (req, res) => {
       if (!Array.isArray(settings.checkoutForm.cityTable) || !settings.checkoutForm.cityTable.length) {
         settings.checkoutForm.cityTable = clean.map(label => ({ ar: label, en: '', he: '' }));
       }
+    }
+    settings.markModified('checkoutForm');
+    await settings.save();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
+// Checkout WhatsApp reminder delivery (Twilio) - admin only
+router.get('/checkout/whatsapp', adminAuth, async (req, res) => {
+  try {
+    let settings = await Settings.findOne();
+    if (!settings) settings = new Settings();
+    const cf = settings.checkoutForm || {};
+    res.json({
+      reminderWhatsAppEnabled: !!cf.reminderWhatsAppEnabled,
+      twilioAccountSid: cf.twilioAccountSid || '',
+      twilioAuthToken: cf.twilioAuthToken ? '***' : '',
+      twilioWhatsAppFrom: cf.twilioWhatsAppFrom || ''
+    });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
+router.put('/checkout/whatsapp', adminAuth, async (req, res) => {
+  try {
+    const { reminderWhatsAppEnabled, twilioAccountSid, twilioAuthToken, twilioWhatsAppFrom } = req.body || {};
+    let settings = await Settings.findOne();
+    if (!settings) settings = new Settings();
+    settings.checkoutForm = settings.checkoutForm || {};
+    if (typeof reminderWhatsAppEnabled === 'boolean') settings.checkoutForm.reminderWhatsAppEnabled = reminderWhatsAppEnabled;
+    if (typeof twilioAccountSid === 'string') settings.checkoutForm.twilioAccountSid = twilioAccountSid.trim();
+    if (typeof twilioWhatsAppFrom === 'string') settings.checkoutForm.twilioWhatsAppFrom = twilioWhatsAppFrom.trim();
+    if (typeof twilioAuthToken === 'string') {
+      if (twilioAuthToken !== '***') settings.checkoutForm.twilioAuthToken = twilioAuthToken.trim();
     }
     settings.markModified('checkoutForm');
     await settings.save();
