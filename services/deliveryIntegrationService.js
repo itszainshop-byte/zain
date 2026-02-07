@@ -175,6 +175,18 @@ function getByPath(obj, path) {
   return path.split('.').reduce((acc, key) => (acc ? acc[key] : undefined), obj);
 }
 
+function inferJsonRpcMethodFromUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  try {
+    const parsed = new URL(url);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const last = segments[segments.length - 1] || '';
+    return last;
+  } catch {
+    return '';
+  }
+}
+
 export function buildPayloadFromMappings(order, company) {
   const payload = {};
   const mappings = Array.isArray(company.fieldMappings) ? company.fieldMappings : [];
@@ -296,9 +308,9 @@ export function validateCompanyConfiguration(company) {
   if (!isTest && !url) issues.push('missing_url');
 
   if (format === 'jsonrpc') {
-    const method = hubCfg?.method || company.apiConfiguration?.method;
+    const method = hubCfg?.method || company.apiConfiguration?.method || inferJsonRpcMethodFromUrl(url);
     const omit = hubCfg?.jsonrpcOmitMethod === true || company.apiConfiguration?.jsonrpcOmitMethod === true || company.apiConfiguration?.omitJsonRpcMethod === true;
-  if (!method && !omit) issues.push('missing_jsonrpc_method');
+    if (!method && !omit) issues.push('missing_jsonrpc_method');
   }
 
   if (authMethod === 'basic') {
@@ -433,6 +445,7 @@ async function sendJsonRpc(order, company, payload) {
   let url = company.apiUrl || company.apiConfiguration?.baseUrl;
   if (!url) throw new Error('Delivery company is missing API URL');
   const omit = company.apiConfiguration?.jsonrpcOmitMethod === true || company.apiConfiguration?.omitJsonRpcMethod === true;
+  const inferredMethod = inferJsonRpcMethodFromUrl(url);
   const globalParams = getGlobalDefaultParams();
   const envDb = process.env.DELIVERY_HUB_DB || process.env.ODOO_DB || process.env.DELIVERY_DB;
   const baseParams = { ...(globalParams || {}), ...(company.apiConfiguration?.params || {}) };
@@ -450,7 +463,7 @@ async function sendJsonRpc(order, company, payload) {
     ? { jsonrpc: '2.0', params }
     : {
         jsonrpc: '2.0',
-        method: company.apiConfiguration?.method || 'create_order',
+        method: company.apiConfiguration?.method || inferredMethod || 'create_order',
         params,
         id: Date.now()
       };
