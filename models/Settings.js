@@ -842,7 +842,12 @@ settingsSchema.add({
     // Checkout reminder message template for abandoned checkouts
     reminderMessageTemplate: { type: String, default: '' },
     reminderCheckoutUrl: { type: String, default: '' },
-    reminderDiscountCode: { type: String, default: '' }
+    reminderDiscountCode: { type: String, default: '' },
+    // WhatsApp reminder delivery (Twilio)
+    reminderWhatsAppEnabled: { type: Boolean, default: false },
+    twilioAccountSid: { type: String, default: '' },
+    twilioAuthToken: { type: String, default: '' },
+    twilioWhatsAppFrom: { type: String, default: '' }
   }
 });
 
