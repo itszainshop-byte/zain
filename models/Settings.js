@@ -563,6 +563,7 @@ settingsSchema.add({
     // Future toggles (currently not rendered in UI):
     showSecondaryMobile: { type: Boolean, default: false },
     showCountry: { type: Boolean, default: false },
+    allowOtherCity: { type: Boolean, default: true },
     // Structured multilingual city labels (editable from admin UI)
     cityTable: [{
       ar: { type: String, default: '' },
@@ -838,7 +839,10 @@ settingsSchema.add({
         'כפר סבא'
       ]
     },
-    allowOtherCity: { type: Boolean, default: true }
+    // Checkout reminder message template for abandoned checkouts
+    reminderMessageTemplate: { type: String, default: '' },
+    reminderCheckoutUrl: { type: String, default: '' },
+    reminderDiscountCode: { type: String, default: '' }
   }
 });
 
