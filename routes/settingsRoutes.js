@@ -1190,6 +1190,7 @@ router.put('/', settingsWriteGuard, async (req, res) => {
             navPanelColumnActiveBgColor: settings.navPanelColumnActiveBgColor,
             navPanelAccentColor: settings.navPanelAccentColor,
             navPanelHeaderColor: settings.navPanelHeaderColor,
+            navLinksInlineWhenNoCategory: settings.navLinksInlineWhenNoCategory,
             fontFamily: settings.fontFamily,
             borderRadius: settings.borderRadius,
             buttonStyle: settings.buttonStyle,
