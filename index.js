@@ -1,4 +1,5 @@
 import recipientRoutes from './routes/recipientRoutes.js';
+import checkoutDraftRoutes from './routes/checkoutDraftRoutes.js';
 // Runtime sanity check: ensure this file is loaded from the expected project/server directory structure.
 // Misconfiguration (e.g., running `node index.js` at repo root without adjusting rootDir) previously caused
 // attempts to resolve './userRoutes.js' from the wrong working directory, leading to ERR_MODULE_NOT_FOUND.
@@ -299,6 +300,7 @@ app.use('/api/mobile-banners', mobileBannerRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/gift-cards', giftCardRoutes);
 app.use('/api/recipients', recipientRoutes);
+app.use('/api/checkout-drafts', checkoutDraftRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/warehouses', warehouseRoutes);
 app.use('/api/shipping', shippingRoutes); // Added Shipping Routes
