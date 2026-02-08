@@ -220,8 +220,10 @@ export const deliveryStatusWebhook = async (req, res) => {
   }
 
   const payload = req.body || {};
-  const orderId = payload.orderId || payload.order_id;
-  const orderNumber = payload.orderNumber || payload.order_number;
+  const rawOrderId = payload.orderId;
+  const rawOrderIdAlias = payload.order_id;
+  const orderId = rawOrderId || (mongoose.isValidObjectId(rawOrderIdAlias) ? rawOrderIdAlias : null);
+  const orderNumber = payload.orderNumber || payload.order_number || (!orderId && rawOrderIdAlias ? rawOrderIdAlias : null);
   const trackingNumber = payload.trackingNumber || payload.tracking_number || payload.trackingId || payload.tracking_id;
   const providerStatus = payload.providerStatus || payload.provider_status || payload.status;
   const companyId = payload.companyId || payload.company_id;
