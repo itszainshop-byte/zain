@@ -229,10 +229,21 @@ export const deliveryStatusWebhook = async (req, res) => {
     if (!trimmed) return null;
     return trimmed.replace(/^#/, '').replace(/#$/, '');
   };
-  const orderNumber =
-    normalizeExternalId(payload.orderNumber) ||
-    normalizeExternalId(payload.order_number) ||
-    (!orderId ? normalizeExternalId(rawOrderIdAlias) : null);
+  const rawOrderNumber = payload.orderNumber || payload.order_number || (!orderId ? rawOrderIdAlias : null);
+  const orderNumber = normalizeExternalId(rawOrderNumber);
+  const buildOrderNumberCandidates = (value) => {
+    const cleaned = normalizeExternalId(value);
+    const raw = value == null ? null : String(value).trim();
+    const candidates = [cleaned, raw].filter(Boolean);
+    const extras = [];
+    for (const c of candidates) {
+      extras.push(c.replace(/^#/, '').replace(/#$/, ''));
+      extras.push(c.endsWith('#') ? c.slice(0, -1) : `${c}#`);
+      extras.push(c.startsWith('#') ? c.slice(1) : `#${c}`);
+    }
+    return Array.from(new Set([...candidates, ...extras].filter(Boolean)));
+  };
+  const orderNumberCandidates = orderNumber ? buildOrderNumberCandidates(rawOrderNumber) : [];
   const trackingNumber = payload.trackingNumber || payload.tracking_number || payload.trackingId || payload.tracking_id;
   const providerStatus = payload.providerStatus || payload.provider_status || payload.status;
   const companyId = payload.companyId || payload.company_id;
@@ -254,8 +265,8 @@ export const deliveryStatusWebhook = async (req, res) => {
   if (orderId) {
     order = await Order.findById(orderId);
   }
-  if (!order && orderNumber) {
-    order = await Order.findOne({ orderNumber: String(orderNumber) });
+  if (!order && orderNumberCandidates.length) {
+    order = await Order.findOne({ orderNumber: { $in: orderNumberCandidates } });
   }
   if (!order && trackingNumber) {
     order = await Order.findOne({
