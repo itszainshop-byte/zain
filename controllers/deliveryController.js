@@ -4,6 +4,30 @@ import DeliveryCompany from '../models/DeliveryCompany.js';
 import Order from '../models/Order.js';
 import { StatusCodes } from 'http-status-codes';
 import { sendToCompany, getDeliveryStatusFromCompany, testCompanyConnection, mapStatus, validateRequiredMappings, validateCompanyConfiguration } from '../services/deliveryIntegrationService.js';
+import { realTimeEventService } from '../services/realTimeEventService.js';
+
+const DELIVERY_WEBHOOK_TOKEN_ENV = 'DELIVERY_WEBHOOK_TOKEN';
+const DELIVERY_ALLOWED_STATUSES = new Set([
+  'assigned',
+  'picked_up',
+  'in_transit',
+  'out_for_delivery',
+  'delivered',
+  'delivery_failed',
+  'returned',
+  'cancelled'
+]);
+
+const normalizeStatusValue = (value) => {
+  if (value === null || value === undefined) return '';
+  return String(value).trim().toLowerCase().replace(/\s+/g, '_');
+};
+
+const parseOptionalDate = (value) => {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
 
 // List companies (admin)
 export const listCompanies = async (req, res) => {
@@ -178,6 +202,114 @@ export const validateCompanyConfig = async (req, res) => {
   });
 };
 
+
+// Delivery status webhook (public with bearer token)
+export const deliveryStatusWebhook = async (req, res) => {
+  const envToken = process.env[DELIVERY_WEBHOOK_TOKEN_ENV];
+  if (!envToken) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      ok: false,
+      message: 'webhook_not_configured'
+    });
+  }
+
+  const authHeader = req.header('Authorization') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token || token !== envToken) {
+    return res.status(StatusCodes.UNAUTHORIZED).json({ ok: false, message: 'invalid_token' });
+  }
+
+  const payload = req.body || {};
+  const orderId = payload.orderId || payload.order_id;
+  const orderNumber = payload.orderNumber || payload.order_number;
+  const trackingNumber = payload.trackingNumber || payload.tracking_number || payload.trackingId || payload.tracking_id;
+  const providerStatus = payload.providerStatus || payload.provider_status || payload.status;
+  const companyId = payload.companyId || payload.company_id;
+  const companyCode = payload.companyCode || payload.company_code;
+  const orderStatus = payload.orderStatus || payload.order_status;
+  const notes = payload.notes || payload.note;
+  const estimatedDate = parseOptionalDate(payload.estimatedDate || payload.estimated_date);
+  const actualDate = parseOptionalDate(payload.actualDate || payload.actual_date);
+  const occurredAt = parseOptionalDate(payload.occurredAt || payload.occurred_at);
+
+  if (!orderId && !orderNumber && !trackingNumber) {
+    return res.status(StatusCodes.BAD_REQUEST).json({
+      ok: false,
+      message: 'orderId, orderNumber, or trackingNumber is required'
+    });
+  }
+
+  let order = null;
+  if (orderId) {
+    order = await Order.findById(orderId);
+  }
+  if (!order && orderNumber) {
+    order = await Order.findOne({ orderNumber: String(orderNumber) });
+  }
+  if (!order && trackingNumber) {
+    order = await Order.findOne({
+      $or: [
+        { deliveryTrackingNumber: String(trackingNumber) },
+        { trackingNumber: String(trackingNumber) }
+      ]
+    });
+  }
+  if (!order) {
+    return res.status(StatusCodes.NOT_FOUND).json({ ok: false, message: 'order_not_found' });
+  }
+
+  let company = null;
+  if (companyId) {
+    company = await DeliveryCompany.findById(companyId);
+  } else if (companyCode) {
+    company = await DeliveryCompany.findOne({ code: String(companyCode) });
+  } else if (order.deliveryCompany) {
+    company = await DeliveryCompany.findById(order.deliveryCompany);
+  }
+
+  let mappedStatus = 'assigned';
+  if (company) {
+    mappedStatus = mapStatus(company, providerStatus || 'assigned');
+  } else {
+    const normalized = normalizeStatusValue(providerStatus || 'assigned');
+    mappedStatus = DELIVERY_ALLOWED_STATUSES.has(normalized) ? normalized : 'assigned';
+  }
+
+  order.deliveryStatus = mappedStatus;
+  order.deliveryStatusUpdated = occurredAt || new Date();
+  if (trackingNumber) {
+    order.deliveryTrackingNumber = String(trackingNumber);
+    order.trackingNumber = String(trackingNumber);
+  }
+  if (company && !order.deliveryCompany) {
+    order.deliveryCompany = company._id;
+  }
+  if (orderStatus) {
+    order.status = String(orderStatus);
+  }
+  if (notes && typeof notes === 'string') {
+    order.deliveryNotes = notes;
+  }
+  if (estimatedDate) {
+    order.deliveryEstimatedDate = estimatedDate;
+  }
+  if (actualDate) {
+    order.deliveryActualDate = actualDate;
+  } else if (mappedStatus === 'delivered' && !order.deliveryActualDate) {
+    order.deliveryActualDate = new Date();
+  }
+
+  await order.save();
+  try { realTimeEventService.emitOrderUpdate(order); } catch {}
+
+  res.json({
+    ok: true,
+    orderId: String(order._id),
+    orderNumber: order.orderNumber,
+    deliveryStatus: order.deliveryStatus,
+    deliveryTrackingNumber: order.deliveryTrackingNumber || order.trackingNumber || null
+  });
+};
 // Proxy external area/sub-area list fetch to avoid CORS in admin UI
 export const proxyExternalList = async (req, res) => {
   const {
