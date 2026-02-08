@@ -22,6 +22,7 @@ import {
   proxyExternalList,
   batchAssignOrders,
   batchSendOrders,
+  deliveryStatusWebhook,
 } from '../controllers/deliveryController.js';
 
 const router = express.Router();
@@ -52,6 +53,9 @@ router.post('/proxy', deliveryAdminGuard, proxyExternalList);
 
 // Public companies listing for checkout
 router.get('/companies/public/active', listActiveCompanies);
+
+// Delivery status webhook (public with bearer token)
+router.post('/webhook/status', deliveryStatusWebhook);
 
 // Fee calculation for a company
 router.post('/companies/:id/calculate-fee', calculateDeliveryFee);
