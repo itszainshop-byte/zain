@@ -223,7 +223,16 @@ export const deliveryStatusWebhook = async (req, res) => {
   const rawOrderId = payload.orderId;
   const rawOrderIdAlias = payload.order_id;
   const orderId = rawOrderId || (mongoose.isValidObjectId(rawOrderIdAlias) ? rawOrderIdAlias : null);
-  const orderNumber = payload.orderNumber || payload.order_number || (!orderId && rawOrderIdAlias ? rawOrderIdAlias : null);
+  const normalizeExternalId = (value) => {
+    if (value === null || value === undefined) return null;
+    const trimmed = String(value).trim();
+    if (!trimmed) return null;
+    return trimmed.replace(/^#/, '').replace(/#$/, '');
+  };
+  const orderNumber =
+    normalizeExternalId(payload.orderNumber) ||
+    normalizeExternalId(payload.order_number) ||
+    (!orderId ? normalizeExternalId(rawOrderIdAlias) : null);
   const trackingNumber = payload.trackingNumber || payload.tracking_number || payload.trackingId || payload.tracking_id;
   const providerStatus = payload.providerStatus || payload.provider_status || payload.status;
   const companyId = payload.companyId || payload.company_id;
