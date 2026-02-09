@@ -126,7 +126,11 @@ export const createMeshulamSessionFromCartHandler = asyncHandler(async (req, res
     });
   } catch (e) {
     try { console.error('[meshulam][session-from-cart] error', e?.message || e); } catch {}
-    return res.status(400).json({ message: 'meshulam_create_failed', detail: e?.message || String(e) });
+    return res.status(400).json({
+      message: 'meshulam_create_failed',
+      detail: e?.message || String(e),
+      payload: e?.payload || undefined
+    });
   }
 });
 

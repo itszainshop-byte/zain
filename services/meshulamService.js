@@ -82,6 +82,15 @@ export async function requestMeshulamPaymentProcess({ session, settings, origin,
     validateStatus: () => true
   });
   const data = resp?.data || {};
+  const contentType = String(resp?.headers?.['content-type'] || '');
+  const rawText = typeof data === 'string' ? data : '';
+  const looksHtml = contentType.includes('text/html') || rawText.includes('<html') || rawText.includes('_Incapsula_Resource');
+  if (looksHtml) {
+    const err = new Error('Meshulam request blocked by WAF (Incapsula).');
+    err.status = resp.status || 502;
+    err.payload = { kind: 'meshulam_waf_blocked' };
+    throw err;
+  }
   if (resp.status >= 400 || data?.status !== 1) {
     const err = new Error(data?.err || data?.message || `Meshulam error (status ${resp.status})`);
     err.status = resp.status;
