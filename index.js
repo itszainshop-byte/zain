@@ -76,6 +76,7 @@ import rivhitRoutes from './routes/rivhitRoutes.js';
 import mcgRoutes from './routes/mcgRoutes.js';
 import zcreditRoutes from './routes/zcreditRoutes.js';
 import zcreditGatewayRoutes from './routes/zcreditGatewayRoutes.js';
+import meshulamRoutes from './routes/meshulamRoutes.js';
 import mobilePushRoutes from './routes/mobilePushRoutes.js';
 import groomingRoutes from './routes/groomingRoutes.js';
 import visitorRoutes from './routes/visitorRoutes.js';
@@ -208,6 +209,7 @@ app.use(cspMiddleware);
 
 // Allow larger JSON payloads (city bulk uploads, etc.) without triggering 413 errors
 app.use(express.json({ limit: '2mb' }));
+// Accept urlencoded for gateway callbacks; additional raw body parsing can be added per-route if needed
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());
 // Serve static for service worker if behind express (especially in production)
@@ -330,6 +332,7 @@ app.use('/api/rivhit', rivhitRoutes);
 app.use('/api/mcg', mcgRoutes);
 app.use('/api/zcredit', zcreditRoutes);
 app.use('/api/zcredit-gw', zcreditGatewayRoutes);
+app.use('/api/meshulam', meshulamRoutes);
 app.use('/api/cancellation-requests', cancellationRequestRoutes);
 app.use('/api/grooming', groomingRoutes);
 app.use('/api/visitors', visitorRoutes);
