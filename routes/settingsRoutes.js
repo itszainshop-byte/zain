@@ -248,6 +248,19 @@ router.get('/', async (req, res) => {
           defaultDiscount: Number(obj.payments.icredit.defaultDiscount) || 0
         };
       }
+      if (obj.payments.meshulam) {
+        obj.payments.meshulam = {
+          enabled: !!obj.payments.meshulam.enabled,
+          apiUrl: obj.payments.meshulam.apiUrl || 'https://sandbox.meshulam.co.il/api/light/server/1.0/createPaymentProcess',
+          approveUrl: obj.payments.meshulam.approveUrl || 'https://sandbox.meshulam.co.il/api/light/server/1.0/approveTransaction',
+          pageCode: obj.payments.meshulam.pageCode || '',
+          userId: obj.payments.meshulam.userId || '',
+          apiKey: obj.payments.meshulam.apiKey ? '***' : '',
+          successUrl: obj.payments.meshulam.successUrl || '',
+          cancelUrl: obj.payments.meshulam.cancelUrl || '',
+          notifyUrl: obj.payments.meshulam.notifyUrl || ''
+        };
+      }
       if (obj.payments.visibility) {
         obj.payments.visibility = {
           card: !!obj.payments.visibility.card,
@@ -2508,6 +2521,68 @@ router.post('/payments/icredit/test', adminAuth, async (req, res) => {
     if (!c.apiUrl) return res.status(400).json({ ok: false, message: 'Missing API URL' });
     if (!c.groupPrivateToken) return res.status(400).json({ ok: false, message: 'Missing GroupPrivateToken' });
     // We don't call the remote API here to avoid network dependency; this endpoint checks local config only.
+    return res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, message: e.message });
+  }
+});
+
+// Meshulam (Grow) Light API config endpoints
+router.get('/payments/meshulam', async (req, res) => {
+  try {
+    let settings = await Settings.findOne();
+    if (!settings) settings = new Settings();
+    const m = (settings.payments && settings.payments.meshulam) || {};
+    return res.json({
+      enabled: !!m.enabled,
+      apiUrl: m.apiUrl || 'https://sandbox.meshulam.co.il/api/light/server/1.0/createPaymentProcess',
+      approveUrl: m.approveUrl || 'https://sandbox.meshulam.co.il/api/light/server/1.0/approveTransaction',
+      pageCode: m.pageCode || '',
+      userId: m.userId || '',
+      apiKey: m.apiKey ? '***' : '',
+      successUrl: m.successUrl || '',
+      cancelUrl: m.cancelUrl || '',
+      notifyUrl: m.notifyUrl || ''
+    });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
+router.put('/payments/meshulam', adminAuth, async (req, res) => {
+  try {
+    const inc = req.body || {};
+    let settings = await Settings.findOne();
+    if (!settings) settings = new Settings();
+    settings.payments = settings.payments || {};
+    settings.payments.meshulam = settings.payments.meshulam || {};
+    const prevKey = settings.payments.meshulam.apiKey || '';
+    if (typeof inc.enabled !== 'undefined') settings.payments.meshulam.enabled = !!inc.enabled;
+    if (typeof inc.apiUrl === 'string') settings.payments.meshulam.apiUrl = inc.apiUrl.trim();
+    if (typeof inc.approveUrl === 'string') settings.payments.meshulam.approveUrl = inc.approveUrl.trim();
+    if (typeof inc.pageCode === 'string') settings.payments.meshulam.pageCode = inc.pageCode.trim();
+    if (typeof inc.userId === 'string') settings.payments.meshulam.userId = inc.userId.trim();
+    if (typeof inc.apiKey === 'string') settings.payments.meshulam.apiKey = inc.apiKey === '***' ? prevKey : inc.apiKey.trim();
+    if (typeof inc.successUrl === 'string') settings.payments.meshulam.successUrl = inc.successUrl.trim();
+    if (typeof inc.cancelUrl === 'string') settings.payments.meshulam.cancelUrl = inc.cancelUrl.trim();
+    if (typeof inc.notifyUrl === 'string') settings.payments.meshulam.notifyUrl = inc.notifyUrl.trim();
+    try { settings.markModified('payments'); } catch {}
+    await settings.save();
+    return res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
+router.post('/payments/meshulam/test', adminAuth, async (req, res) => {
+  try {
+    let settings = await Settings.findOne();
+    const m = settings?.payments?.meshulam || {};
+    if (!m.enabled) return res.status(400).json({ ok: false, message: 'Meshulam is disabled' });
+    if (!m.apiUrl) return res.status(400).json({ ok: false, message: 'Missing create API URL' });
+    if (!m.approveUrl) return res.status(400).json({ ok: false, message: 'Missing approve API URL' });
+    if (!m.pageCode) return res.status(400).json({ ok: false, message: 'Missing pageCode' });
+    if (!m.userId) return res.status(400).json({ ok: false, message: 'Missing userId' });
     return res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, message: e.message });
