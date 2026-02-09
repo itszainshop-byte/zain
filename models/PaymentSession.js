@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const PaymentSessionSchema = new mongoose.Schema({
-  gateway: { type: String, enum: ['icredit', 'zcredit', 'paypal'], required: true, default: 'icredit' },
+  gateway: { type: String, enum: ['icredit', 'zcredit', 'paypal', 'meshulam'], required: true, default: 'icredit' },
   status: { type: String, enum: ['created', 'approved', 'failed', 'confirmed'], default: 'created', index: true },
   reference: { type: String, index: true },
   orderNumber: { type: String, index: true },

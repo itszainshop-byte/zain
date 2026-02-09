@@ -123,6 +123,7 @@ const settingsSchema = new mongoose.Schema({
   navPanelColumnActiveBgColor: { type: String, default: '' },
   navPanelAccentColor: { type: String, default: '' },
   navPanelHeaderColor: { type: String, default: '' },
+  navLinksInlineWhenNoCategory: { type: Boolean, default: false },
   fontFamily: {
     type: String,
     default: 'Inter, system-ui, sans-serif'
@@ -894,6 +895,20 @@ settingsSchema.add({
       emailBcc: { type: String, default: '' },
       defaultDiscount: { type: Number, default: 0, min: 0 }
     },
+    // Meshulam (Grow) Light API integration
+    meshulam: {
+      enabled: { type: Boolean, default: false },
+      // Create payment process URL
+      apiUrl: { type: String, default: 'https://sandbox.meshulam.co.il/api/light/server/1.0/createPaymentProcess' },
+      // Approve transaction URL
+      approveUrl: { type: String, default: 'https://sandbox.meshulam.co.il/api/light/server/1.0/approveTransaction' },
+      pageCode: { type: String, default: '' },
+      userId: { type: String, default: '' },
+      apiKey: { type: String, default: '' },
+      successUrl: { type: String, default: '' },
+      cancelUrl: { type: String, default: '' },
+      notifyUrl: { type: String, default: '' }
+    },
     // Visibility / availability flags for each checkout payment option
     visibility: {
       card: { type: Boolean, default: true },      // credit/debit card (local form)
@@ -961,6 +976,7 @@ settingsSchema.statics.createDefaultSettings = async function() {
       ensureField('navPanelColumnActiveBgColor', '');
       ensureField('navPanelAccentColor', '');
       ensureField('navPanelHeaderColor', '');
+      ensureField('navLinksInlineWhenNoCategory', false);
   ensureField('searchBorderColor', '');
   // Ensure scroll-to-top fields exist
   ensureField('scrollTopBgColor', '');
@@ -1066,6 +1082,17 @@ settingsSchema.statics.createDefaultSettings = async function() {
             emailBcc: '',
             defaultDiscount: 0
           },
+          meshulam: {
+            enabled: false,
+            apiUrl: 'https://sandbox.meshulam.co.il/api/light/server/1.0/createPaymentProcess',
+            approveUrl: 'https://sandbox.meshulam.co.il/api/light/server/1.0/approveTransaction',
+            pageCode: '',
+            userId: '',
+            apiKey: '',
+            successUrl: '',
+            cancelUrl: '',
+            notifyUrl: ''
+          },
           visibility: {
             card: true,
             cod: true,
@@ -1105,6 +1132,24 @@ settingsSchema.statics.createDefaultSettings = async function() {
             hideItemList: false,
             emailBcc: '',
             defaultDiscount: 0
+          }
+        };
+        needsUpdate = true;
+      }
+      // Ensure payments.meshulam exists if payments existed previously
+      if (settings.payments && !settings.payments.meshulam) {
+        updateData.payments = {
+          ...(updateData.payments || settings.payments),
+          meshulam: {
+            enabled: false,
+            apiUrl: 'https://sandbox.meshulam.co.il/api/light/server/1.0/createPaymentProcess',
+            approveUrl: 'https://sandbox.meshulam.co.il/api/light/server/1.0/approveTransaction',
+            pageCode: '',
+            userId: '',
+            apiKey: '',
+            successUrl: '',
+            cancelUrl: '',
+            notifyUrl: ''
           }
         };
         needsUpdate = true;
