@@ -77,7 +77,11 @@ export async function requestMeshulamPaymentProcess({ session, settings, origin,
   const { form } = buildMeshulamCreateForm({ session, settings, origin, overrides });
   const url = settings.apiUrl || DEFAULT_CREATE_URL;
   const resp = await axios.post(url, form, {
-    headers: form.getHeaders(),
+    headers: {
+      ...form.getHeaders(),
+      Accept: 'application/json, text/plain, */*',
+      'User-Agent': 'Mozilla/5.0 (MeshulamIntegration/1.0; +https://example.com)'
+    },
     timeout: 20000,
     validateStatus: () => true
   });
@@ -86,6 +90,15 @@ export async function requestMeshulamPaymentProcess({ session, settings, origin,
   const rawText = typeof data === 'string' ? data : '';
   const looksHtml = contentType.includes('text/html') || rawText.includes('<html') || rawText.includes('_Incapsula_Resource');
   if (looksHtml) {
+    const snippet = rawText.replace(/\s+/g, ' ').slice(0, 300);
+    try {
+      console.warn('[meshulam][waf] blocked response', {
+        status: resp.status,
+        contentType,
+        url,
+        snippet
+      });
+    } catch {}
     const err = new Error('Meshulam request blocked by WAF (Incapsula).');
     err.status = resp.status || 502;
     err.payload = { kind: 'meshulam_waf_blocked' };
