@@ -27,6 +27,22 @@ function normalizeNumber(value, fallback = 0) {
   return n;
 }
 
+function normalizeMeshulamPhone(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('972') && digits.length === 12) return `0${digits.slice(3)}`;
+  if (digits.length === 9 && digits.startsWith('5')) return `0${digits}`;
+  return digits;
+}
+
+function normalizeMeshulamFullName(fullNameRaw) {
+  const safe = String(fullNameRaw || '').trim();
+  const parts = safe.split(/\s+/).filter(Boolean);
+  const validParts = parts.filter((p) => p.length >= 2);
+  if (validParts.length >= 2) return `${validParts[0]} ${validParts[1]}`;
+  return 'Customer Name';
+}
+
 function buildTotalAmount(session) {
   const itemsTotal = (session.items || []).reduce((sum, item) => {
     const qty = normalizeNumber(item.quantity, 0);
@@ -43,8 +59,8 @@ function buildTotalAmount(session) {
 
 export function buildMeshulamCreateForm({ session, settings, origin, overrides = {} }) {
   const fullNameRaw = `${session?.customerInfo?.firstName || ''} ${session?.customerInfo?.lastName || ''}`.trim();
-  const fullName = fullNameRaw || session?.customerInfo?.email || 'Customer';
-  const phone = String(session?.customerInfo?.mobile || '').trim();
+  const fullName = normalizeMeshulamFullName(fullNameRaw || session?.customerInfo?.email || '');
+  const phone = normalizeMeshulamPhone(session?.customerInfo?.mobile || '');
   const email = String(session?.customerInfo?.email || '').trim();
 
   const { cardChargeAmount } = buildTotalAmount(session);
@@ -76,11 +92,19 @@ export function buildMeshulamCreateForm({ session, settings, origin, overrides =
 export async function requestMeshulamPaymentProcess({ session, settings, origin, overrides = {} }) {
   const { form } = buildMeshulamCreateForm({ session, settings, origin, overrides });
   const url = settings.apiUrl || DEFAULT_CREATE_URL;
+  const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  const extraHeaders = {
+    Accept: 'application/json, text/plain, */*',
+    'User-Agent': ua
+  };
+  if (origin) {
+    extraHeaders.Origin = origin;
+    extraHeaders.Referer = origin;
+  }
   const resp = await axios.post(url, form, {
     headers: {
       ...form.getHeaders(),
-      Accept: 'application/json, text/plain, */*',
-      'User-Agent': 'Mozilla/5.0 (MeshulamIntegration/1.0; +https://example.com)'
+      ...extraHeaders
     },
     timeout: 20000,
     validateStatus: () => true
