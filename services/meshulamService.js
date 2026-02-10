@@ -1,5 +1,4 @@
 import axios from 'axios';
-import FormData from 'form-data';
 import Settings from '../models/Settings.js';
 
 const DEFAULT_CREATE_URL = 'https://sandbox.meshulam.co.il/api/light/server/1.0/createPaymentProcess';
@@ -96,40 +95,45 @@ export function buildMeshulamCreateForm({ session, settings, origin, overrides =
 
   const description = overrides.description || `Order ${session.reference || session._id}`;
 
-  const form = new FormData();
-  form.append('pageCode', overrides.pageCode || settings.pageCode || '');
-  form.append('userId', overrides.userId || settings.userId || '');
-  if (settings.apiKey) form.append('apiKey', settings.apiKey);
-  form.append('sum', String(sum));
-  form.append('successUrl', successUrl || '');
-  form.append('cancelUrl', cancelUrl || '');
-  form.append('description', description);
-  form.append('pageField[fullName]', fullName);
-  form.append('pageField[phone]', phone);
-  if (email) form.append('pageField[email]', email);
-  form.append('cField1', String(session._id));
-  if (notifyUrl) form.append('notifyUrl', notifyUrl);
+  const payload = {
+    pageCode: overrides.pageCode || settings.pageCode || '',
+    userId: overrides.userId || settings.userId || '',
+    apiKey: settings.apiKey || undefined,
+    sum: String(sum),
+    successUrl: successUrl || '',
+    cancelUrl: cancelUrl || '',
+    description,
+    'pageField[fullName]': fullName,
+    'pageField[phone]': phone,
+    'pageField[email]': email || undefined,
+    cField1: String(session._id),
+    notifyUrl: notifyUrl || undefined
+  };
 
-  return { form, sum, successUrl, cancelUrl, notifyUrl };
+  return { payload, sum, successUrl, cancelUrl, notifyUrl };
 }
 
 export async function requestMeshulamPaymentProcess({ session, settings, origin, overrides = {} }) {
-  const { form } = buildMeshulamCreateForm({ session, settings, origin, overrides });
+  const { payload } = buildMeshulamCreateForm({ session, settings, origin, overrides });
   const url = settings.apiUrl || DEFAULT_CREATE_URL;
   const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
   const extraHeaders = {
     Accept: 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
     'User-Agent': ua
   };
   if (origin) {
     extraHeaders.Origin = origin;
     extraHeaders.Referer = origin;
   }
-  const resp = await axios.post(url, form, {
-    headers: {
-      ...form.getHeaders(),
-      ...extraHeaders
-    },
+  const formBody = new URLSearchParams();
+  Object.entries(payload || {}).forEach(([key, value]) => {
+    if (typeof value === 'undefined' || value === null) return;
+    formBody.append(key, String(value));
+  });
+  const resp = await axios.post(url, formBody.toString(), {
+    headers: extraHeaders,
     timeout: 20000,
     validateStatus: () => true
   });
@@ -163,13 +167,17 @@ export async function requestMeshulamPaymentProcess({ session, settings, origin,
 
 export async function approveMeshulamTransaction({ settings, payload }) {
   const url = settings.approveUrl || DEFAULT_APPROVE_URL;
-  const form = new FormData();
+  const formBody = new URLSearchParams();
   Object.entries(payload || {}).forEach(([key, value]) => {
     if (typeof value === 'undefined' || value === null) return;
-    form.append(key, String(value));
+    formBody.append(key, String(value));
   });
-  const resp = await axios.post(url, form, {
-    headers: form.getHeaders(),
+  const resp = await axios.post(url, formBody.toString(), {
+    headers: {
+      Accept: 'application/json, text/plain, */*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+    },
     timeout: 20000,
     validateStatus: () => true
   });
