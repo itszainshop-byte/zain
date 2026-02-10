@@ -164,6 +164,13 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ message: 'Complete shipping address is required' });
     }
 
+    const normalizeCountryCode = (value) => {
+      if (!value) return value;
+      const code = String(value).trim().toUpperCase();
+      return code === 'PS' ? 'IL' : code;
+    };
+    shippingAddress.country = normalizeCountryCode(shippingAddress.country);
+
     const normalizedAreaGroup = typeof shippingAddress.areaGroup === 'string' ? shippingAddress.areaGroup.trim() : '';
     const normalizedShippingAddress = {
       street: shippingAddress.street,
