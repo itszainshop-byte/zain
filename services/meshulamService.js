@@ -43,6 +43,20 @@ function normalizeMeshulamFullName(fullNameRaw) {
   return 'Customer Name';
 }
 
+function isPublicHttpsUrl(value) {
+  if (!value) return false;
+  try {
+    const url = new URL(String(value));
+    if (url.protocol !== 'https:') return false;
+    const host = url.hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1') return false;
+    if (host.endsWith('.local')) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function buildTotalAmount(session) {
   const itemsTotal = (session.items || []).reduce((sum, item) => {
     const qty = normalizeNumber(item.quantity, 0);
@@ -68,7 +82,17 @@ export function buildMeshulamCreateForm({ session, settings, origin, overrides =
 
   const successUrl = overrides.successUrl || settings.successUrl || (origin ? `${origin}/payment/return?gateway=meshulam&session=${session._id}` : '');
   const cancelUrl = overrides.cancelUrl || settings.cancelUrl || (origin ? `${origin}/cart` : '');
-  const notifyUrl = overrides.notifyUrl || settings.notifyUrl || (origin ? `${origin}/api/payments/meshulam/callback` : '');
+  const notifyUrl = overrides.notifyUrl || settings.notifyUrl || (origin ? `${origin}/api/meshulam/callback` : '');
+
+  if (!isPublicHttpsUrl(successUrl)) {
+    throw new Error('meshulam_invalid_success_url');
+  }
+  if (!isPublicHttpsUrl(cancelUrl)) {
+    throw new Error('meshulam_invalid_cancel_url');
+  }
+  if (!isPublicHttpsUrl(notifyUrl)) {
+    throw new Error('meshulam_invalid_notify_url');
+  }
 
   const description = overrides.description || `Order ${session.reference || session._id}`;
 
