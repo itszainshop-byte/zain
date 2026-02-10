@@ -150,6 +150,10 @@ export async function requestMeshulamPaymentProcess({ session, settings, origin,
         url,
         snippet
       });
+      if (String(process.env.MESHULAM_WAF_DEBUG || '') === '1') {
+        console.warn('[meshulam][waf] headers', resp?.headers || {});
+        console.warn('[meshulam][waf] body', rawText || '');
+      }
     } catch {}
     const err = new Error('Meshulam request blocked by WAF (Incapsula).');
     err.status = resp.status || 502;
