@@ -302,6 +302,7 @@ router.get('/', async (req, res) => {
       if (obj.checkoutForm.twilioAccountSid) obj.checkoutForm.twilioAccountSid = '***';
       if (obj.checkoutForm.twilioAuthToken) obj.checkoutForm.twilioAuthToken = '***';
       if (obj.checkoutForm.twilioWhatsAppFrom) obj.checkoutForm.twilioWhatsAppFrom = '***';
+      if (obj.checkoutForm.twilioMessagingServiceSid) obj.checkoutForm.twilioMessagingServiceSid = '***';
     }
     // Normalize favicon (and optionally logo) to absolute so other-origins (Netlify) can load it
     try {
@@ -2388,11 +2389,17 @@ router.get('/checkout/whatsapp', adminAuth, async (req, res) => {
     let settings = await Settings.findOne();
     if (!settings) settings = new Settings();
     const cf = settings.checkoutForm || {};
+    const envEnabled = String(process.env.TWILIO_WHATSAPP_AUTO_ENABLED || '').trim() === '1';
+    const envAccountSid = process.env.TWILIO_ACCOUNT_SID || '';
+    const envAuthToken = process.env.TWILIO_AUTH_TOKEN || '';
+    const envFrom = process.env.TWILIO_WHATSAPP_FROM || '';
+    const envMessagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID || '';
     res.json({
-      reminderWhatsAppEnabled: !!cf.reminderWhatsAppEnabled,
-      twilioAccountSid: cf.twilioAccountSid || '',
-      twilioAuthToken: cf.twilioAuthToken ? '***' : '',
-      twilioWhatsAppFrom: cf.twilioWhatsAppFrom || ''
+      reminderWhatsAppEnabled: cf.reminderWhatsAppEnabled != null ? !!cf.reminderWhatsAppEnabled : envEnabled,
+      twilioAccountSid: cf.twilioAccountSid || envAccountSid,
+      twilioAuthToken: (cf.twilioAuthToken || envAuthToken) ? '***' : '',
+      twilioWhatsAppFrom: cf.twilioWhatsAppFrom || envFrom,
+      twilioMessagingServiceSid: cf.twilioMessagingServiceSid || envMessagingServiceSid
     });
   } catch (e) {
     res.status(500).json({ message: e.message });
@@ -2401,13 +2408,14 @@ router.get('/checkout/whatsapp', adminAuth, async (req, res) => {
 
 router.put('/checkout/whatsapp', adminAuth, async (req, res) => {
   try {
-    const { reminderWhatsAppEnabled, twilioAccountSid, twilioAuthToken, twilioWhatsAppFrom } = req.body || {};
+    const { reminderWhatsAppEnabled, twilioAccountSid, twilioAuthToken, twilioWhatsAppFrom, twilioMessagingServiceSid } = req.body || {};
     let settings = await Settings.findOne();
     if (!settings) settings = new Settings();
     settings.checkoutForm = settings.checkoutForm || {};
     if (typeof reminderWhatsAppEnabled === 'boolean') settings.checkoutForm.reminderWhatsAppEnabled = reminderWhatsAppEnabled;
     if (typeof twilioAccountSid === 'string') settings.checkoutForm.twilioAccountSid = twilioAccountSid.trim();
     if (typeof twilioWhatsAppFrom === 'string') settings.checkoutForm.twilioWhatsAppFrom = twilioWhatsAppFrom.trim();
+    if (typeof twilioMessagingServiceSid === 'string') settings.checkoutForm.twilioMessagingServiceSid = twilioMessagingServiceSid.trim();
     if (typeof twilioAuthToken === 'string') {
       if (twilioAuthToken !== '***') settings.checkoutForm.twilioAuthToken = twilioAuthToken.trim();
     }
