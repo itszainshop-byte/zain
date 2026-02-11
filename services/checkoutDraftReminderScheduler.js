@@ -5,6 +5,13 @@ import Settings from '../models/Settings.js';
 const REMINDER_DELAY_MS = 10 * 60 * 1000;
 const POLL_INTERVAL_MS = 60 * 1000;
 const SETTINGS_CACHE_MS = 60 * 1000;
+const envTwilio = {
+  enabled: String(process.env.TWILIO_WHATSAPP_AUTO_ENABLED || '').trim() === '1',
+  accountSid: process.env.TWILIO_ACCOUNT_SID || '',
+  authToken: process.env.TWILIO_AUTH_TOKEN || '',
+  from: process.env.TWILIO_WHATSAPP_FROM || '',
+  messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID || ''
+};
 
 let timer = null;
 let cachedSettings = null;
@@ -67,10 +74,14 @@ const normalizeFromAddress = (from) => {
   return `whatsapp:+${digits}`;
 };
 
-const sendWhatsAppViaTwilio = async ({ accountSid, authToken, from, to, body }) => {
+const sendWhatsAppViaTwilio = async ({ accountSid, authToken, from, messagingServiceSid, to, body }) => {
   const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
   const payload = new URLSearchParams();
-  payload.set('From', from);
+  if (messagingServiceSid) {
+    payload.set('MessagingServiceSid', messagingServiceSid);
+  } else {
+    payload.set('From', from);
+  }
   payload.set('To', to);
   payload.set('Body', body);
   const response = await axios.post(url, payload.toString(), {
@@ -109,12 +120,15 @@ export function startCheckoutDraftReminderScheduler() {
       const template = cf.reminderMessageTemplate || '';
       const checkoutUrl = cf.reminderCheckoutUrl || '';
       const discountCode = cf.reminderDiscountCode || '';
-      const whatsappEnabled = !!cf.reminderWhatsAppEnabled;
-      const accountSid = String(cf.twilioAccountSid || '').trim();
-      const authToken = String(cf.twilioAuthToken || '').trim();
-      const from = normalizeFromAddress(cf.twilioWhatsAppFrom || '');
+      const whatsappEnabled = cf.reminderWhatsAppEnabled != null
+        ? !!cf.reminderWhatsAppEnabled
+        : envTwilio.enabled;
+      const accountSid = String(cf.twilioAccountSid || envTwilio.accountSid || '').trim();
+      const authToken = String(cf.twilioAuthToken || envTwilio.authToken || '').trim();
+      const from = normalizeFromAddress(cf.twilioWhatsAppFrom || envTwilio.from || '');
+      const messagingServiceSid = String(cf.twilioMessagingServiceSid || envTwilio.messagingServiceSid || '').trim();
 
-      if (!whatsappEnabled || !accountSid || !authToken || !from) {
+      if (!whatsappEnabled || !accountSid || !authToken || (!from && !messagingServiceSid)) {
         console.warn('[reminder] Twilio WhatsApp not configured; skipping auto reminders');
         return;
       }
@@ -130,6 +144,7 @@ export function startCheckoutDraftReminderScheduler() {
             accountSid,
             authToken,
             from,
+            messagingServiceSid,
             to,
             body: message
           });

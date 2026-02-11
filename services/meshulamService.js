@@ -117,56 +117,87 @@ export async function requestMeshulamPaymentProcess({ session, settings, origin,
   const { payload } = buildMeshulamCreateForm({ session, settings, origin, overrides });
   const url = settings.apiUrl || DEFAULT_CREATE_URL;
   const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-  const extraHeaders = {
-    Accept: 'application/json, text/plain, */*',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-    'User-Agent': ua
+
+  const makeHeaders = (attachOrigin) => {
+    const base = {
+      Accept: 'application/json, text/plain, */*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'User-Agent': ua
+    };
+    if (attachOrigin && origin) {
+      base.Origin = origin;
+      base.Referer = origin;
+    }
+    return base;
   };
-  if (origin) {
-    extraHeaders.Origin = origin;
-    extraHeaders.Referer = origin;
-  }
+
   const formBody = new URLSearchParams();
   Object.entries(payload || {}).forEach(([key, value]) => {
     if (typeof value === 'undefined' || value === null) return;
     formBody.append(key, String(value));
   });
-  const resp = await axios.post(url, formBody.toString(), {
-    headers: extraHeaders,
-    timeout: 20000,
-    validateStatus: () => true
-  });
-  const data = resp?.data || {};
-  const contentType = String(resp?.headers?.['content-type'] || '');
-  const rawText = typeof data === 'string' ? data : '';
-  const looksHtml = contentType.includes('text/html') || rawText.includes('<html') || rawText.includes('_Incapsula_Resource');
-  if (looksHtml) {
-    const snippet = rawText.replace(/\s+/g, ' ').slice(0, 300);
+
+  const parseResponse = (resp) => {
+    const data = resp?.data || {};
+    const contentType = String(resp?.headers?.['content-type'] || '');
+    const rawText = typeof data === 'string' ? data : '';
+    const looksHtml = contentType.includes('text/html') || rawText.includes('<html') || rawText.includes('_Incapsula_Resource');
+    if (looksHtml) {
+      const snippet = rawText.replace(/\s+/g, ' ').slice(0, 300);
+      try {
+        console.warn('[meshulam][waf] blocked response', {
+          status: resp.status,
+          contentType,
+          url,
+          snippet
+        });
+        if (String(process.env.MESHULAM_WAF_DEBUG || '') === '1') {
+          console.warn('[meshulam][waf] headers', resp?.headers || {});
+          console.warn('[meshulam][waf] body', rawText || '');
+        }
+      } catch {}
+      const err = new Error('Meshulam request blocked by WAF (Incapsula).');
+      err.status = resp.status || 502;
+      err.payload = { kind: 'meshulam_waf_blocked' };
+      throw err;
+    }
+    if (resp.status >= 400 || data?.status !== 1) {
+      const err = new Error(data?.err || data?.message || `Meshulam error (status ${resp.status})`);
+      err.status = resp.status;
+      err.payload = data;
+      throw err;
+    }
+    return data;
+  };
+
+  const attempts = [];
+  if (origin) attempts.push(true); // keep legacy behavior first
+  attempts.push(false); // fallback without Origin/Referer to dodge Incapsula WAF
+
+  let lastErr;
+  for (let i = 0; i < attempts.length; i += 1) {
+    const withOrigin = attempts[i];
     try {
-      console.warn('[meshulam][waf] blocked response', {
-        status: resp.status,
-        contentType,
-        url,
-        snippet
+      const resp = await axios.post(url, formBody.toString(), {
+        headers: makeHeaders(withOrigin),
+        timeout: 20000,
+        validateStatus: () => true
       });
-      if (String(process.env.MESHULAM_WAF_DEBUG || '') === '1') {
-        console.warn('[meshulam][waf] headers', resp?.headers || {});
-        console.warn('[meshulam][waf] body', rawText || '');
-      }
-    } catch {}
-    const err = new Error('Meshulam request blocked by WAF (Incapsula).');
-    err.status = resp.status || 502;
-    err.payload = { kind: 'meshulam_waf_blocked' };
-    throw err;
+      return parseResponse(resp);
+    } catch (err) {
+      lastErr = err;
+      const wafBlocked = err?.payload?.kind === 'meshulam_waf_blocked';
+      if (!wafBlocked) throw err;
+      const hasNextAttempt = i < attempts.length - 1;
+      if (!hasNextAttempt) throw err;
+      try {
+        console.warn('[meshulam][waf] retrying without origin header');
+      } catch {}
+    }
   }
-  if (resp.status >= 400 || data?.status !== 1) {
-    const err = new Error(data?.err || data?.message || `Meshulam error (status ${resp.status})`);
-    err.status = resp.status;
-    err.payload = data;
-    throw err;
-  }
-  return data;
+
+  throw lastErr;
 }
 
 export async function approveMeshulamTransaction({ settings, payload }) {
