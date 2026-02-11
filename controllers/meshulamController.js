@@ -57,7 +57,7 @@ function parseGiftCardPayload(raw) {
 
 export const createMeshulamSessionFromCartHandler = asyncHandler(async (req, res) => {
   const body = req.body || {};
-  const { items, shippingAddress, customerInfo, currency, shippingFee, coupon } = body;
+  const { items, shippingAddress, customerInfo, currency, shippingFee, coupon, pageType, pageCode } = body;
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'items required' });
   if (!shippingAddress?.street || !shippingAddress?.city || !shippingAddress?.country) return res.status(400).json({ message: 'invalid_shipping' });
   if (!customerInfo?.email || !customerInfo?.mobile) return res.status(400).json({ message: 'invalid_customer' });
@@ -103,7 +103,9 @@ export const createMeshulamSessionFromCartHandler = asyncHandler(async (req, res
       settings,
       origin,
       overrides: {
-        description: body?.description
+        description: body?.description,
+        pageType,
+        pageCode
       }
     });
 
@@ -111,7 +113,8 @@ export const createMeshulamSessionFromCartHandler = asyncHandler(async (req, res
       meshulam: {
         processId: data?.data?.processId,
         processToken: data?.data?.processToken,
-        url: data?.data?.url
+        url: data?.data?.url,
+        pageCode: data?.pageCode || pageCode || settings.pageCode
       }
     };
     await ps.save();
@@ -122,7 +125,8 @@ export const createMeshulamSessionFromCartHandler = asyncHandler(async (req, res
       orderNumber: ps.reference,
       processId: data?.data?.processId,
       processToken: data?.data?.processToken,
-      url: data?.data?.url
+      url: data?.data?.url,
+      pageCode: data?.pageCode || pageCode || settings.pageCode
     });
   } catch (e) {
     try { console.error('[meshulam][session-from-cart] error', e?.message || e); } catch {}

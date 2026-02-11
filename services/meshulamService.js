@@ -4,6 +4,18 @@ import Settings from '../models/Settings.js';
 const DEFAULT_CREATE_URL = 'https://sandbox.meshulam.co.il/api/light/server/1.0/createPaymentProcess';
 const DEFAULT_APPROVE_URL = 'https://sandbox.meshulam.co.il/api/light/server/1.0/approveTransaction';
 
+// Grow/Meshulam demo identifiers shared by the docs (non-secret).
+const DEFAULT_USER_ID = '4ec1d595ae764243';
+export const MESHULAM_PAGE_CODES = {
+  sdkwallet: 'c34d1f4a546f',
+  generic: 'b73ca07591f8',
+  creditcard: '0b7a16e03b25',
+  googlepay: '77a2993849cd',
+  applepay: '9eeea7787d67',
+  bit: 'e20c9458e9f3',
+  bitqr: '39bf173ce7d0'
+};
+
 export async function loadMeshulamSettings() {
   const settings = await Settings.findOne().lean().exec();
   const cfg = settings?.payments?.meshulam || {};
@@ -11,8 +23,8 @@ export async function loadMeshulamSettings() {
     enabled: !!cfg.enabled,
     apiUrl: cfg.apiUrl || DEFAULT_CREATE_URL,
     approveUrl: cfg.approveUrl || DEFAULT_APPROVE_URL,
-    pageCode: cfg.pageCode || '',
-    userId: cfg.userId || '',
+    pageCode: cfg.pageCode || MESHULAM_PAGE_CODES.generic,
+    userId: cfg.userId || DEFAULT_USER_ID,
     apiKey: cfg.apiKey || '',
     successUrl: cfg.successUrl || '',
     cancelUrl: cfg.cancelUrl || '',
@@ -70,6 +82,23 @@ function buildTotalAmount(session) {
   return { itemsTotal, couponDiscount, shippingFee, totalWithShipping, cardChargeAmount };
 }
 
+function normalizePageType(pageType) {
+  if (!pageType) return '';
+  return String(pageType).toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function resolveMeshulamPageCode({ settings, overrides }) {
+  const normalizedType = normalizePageType(overrides?.pageType);
+  if (normalizedType) {
+    const mapped = MESHULAM_PAGE_CODES[normalizedType];
+    if (!mapped) throw new Error('meshulam_unknown_page_type');
+    return mapped;
+  }
+
+  if (overrides?.pageCode) return overrides.pageCode;
+  return settings?.pageCode || MESHULAM_PAGE_CODES.generic;
+}
+
 export function buildMeshulamCreateForm({ session, settings, origin, overrides = {} }) {
   const fullNameRaw = `${session?.customerInfo?.firstName || ''} ${session?.customerInfo?.lastName || ''}`.trim();
   const fullName = normalizeMeshulamFullName(fullNameRaw || session?.customerInfo?.email || '');
@@ -93,11 +122,13 @@ export function buildMeshulamCreateForm({ session, settings, origin, overrides =
     throw new Error('meshulam_invalid_notify_url');
   }
 
+  const pageCode = resolveMeshulamPageCode({ settings, overrides });
+
   const description = overrides.description || `Order ${session.reference || session._id}`;
 
   const payload = {
-    pageCode: overrides.pageCode || settings.pageCode || '',
-    userId: overrides.userId || settings.userId || '',
+    pageCode,
+    userId: overrides.userId || settings.userId || DEFAULT_USER_ID,
     apiKey: settings.apiKey || undefined,
     sum: String(sum),
     successUrl: successUrl || '',
@@ -110,94 +141,63 @@ export function buildMeshulamCreateForm({ session, settings, origin, overrides =
     notifyUrl: notifyUrl || undefined
   };
 
-  return { payload, sum, successUrl, cancelUrl, notifyUrl };
+  return { payload, sum, successUrl, cancelUrl, notifyUrl, pageCode };
 }
 
 export async function requestMeshulamPaymentProcess({ session, settings, origin, overrides = {} }) {
-  const { payload } = buildMeshulamCreateForm({ session, settings, origin, overrides });
+  const { payload, pageCode } = buildMeshulamCreateForm({ session, settings, origin, overrides });
   const url = settings.apiUrl || DEFAULT_CREATE_URL;
   const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-
-  const makeHeaders = (attachOrigin) => {
-    const base = {
-      Accept: 'application/json, text/plain, */*',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      'User-Agent': ua
-    };
-    if (attachOrigin && origin) {
-      base.Origin = origin;
-      base.Referer = origin;
-    }
-    return base;
+  const extraHeaders = {
+    Accept: 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+    'User-Agent': ua
   };
-
+  if (origin) {
+    extraHeaders.Origin = origin;
+    extraHeaders.Referer = origin;
+  }
   const formBody = new URLSearchParams();
   Object.entries(payload || {}).forEach(([key, value]) => {
     if (typeof value === 'undefined' || value === null) return;
     formBody.append(key, String(value));
   });
-
-  const parseResponse = (resp) => {
-    const data = resp?.data || {};
-    const contentType = String(resp?.headers?.['content-type'] || '');
-    const rawText = typeof data === 'string' ? data : '';
-    const looksHtml = contentType.includes('text/html') || rawText.includes('<html') || rawText.includes('_Incapsula_Resource');
-    if (looksHtml) {
-      const snippet = rawText.replace(/\s+/g, ' ').slice(0, 300);
-      try {
-        console.warn('[meshulam][waf] blocked response', {
-          status: resp.status,
-          contentType,
-          url,
-          snippet
-        });
-        if (String(process.env.MESHULAM_WAF_DEBUG || '') === '1') {
-          console.warn('[meshulam][waf] headers', resp?.headers || {});
-          console.warn('[meshulam][waf] body', rawText || '');
-        }
-      } catch {}
-      const err = new Error('Meshulam request blocked by WAF (Incapsula).');
-      err.status = resp.status || 502;
-      err.payload = { kind: 'meshulam_waf_blocked' };
-      throw err;
-    }
-    if (resp.status >= 400 || data?.status !== 1) {
-      const err = new Error(data?.err || data?.message || `Meshulam error (status ${resp.status})`);
-      err.status = resp.status;
-      err.payload = data;
-      throw err;
-    }
-    return data;
-  };
-
-  const attempts = [];
-  if (origin) attempts.push(true); // keep legacy behavior first
-  attempts.push(false); // fallback without Origin/Referer to dodge Incapsula WAF
-
-  let lastErr;
-  for (let i = 0; i < attempts.length; i += 1) {
-    const withOrigin = attempts[i];
+  const resp = await axios.post(url, formBody.toString(), {
+    headers: extraHeaders,
+    timeout: 20000,
+    validateStatus: () => true
+  });
+  const data = resp?.data || {};
+  const contentType = String(resp?.headers?.['content-type'] || '');
+  const rawText = typeof data === 'string' ? data : '';
+  const looksHtml = contentType.includes('text/html') || rawText.includes('<html') || rawText.includes('_Incapsula_Resource');
+  if (looksHtml) {
+    const snippet = rawText.replace(/\s+/g, ' ').slice(0, 300);
     try {
-      const resp = await axios.post(url, formBody.toString(), {
-        headers: makeHeaders(withOrigin),
-        timeout: 20000,
-        validateStatus: () => true
+      console.warn('[meshulam][waf] blocked response', {
+        status: resp.status,
+        contentType,
+        url,
+        snippet
       });
-      return parseResponse(resp);
-    } catch (err) {
-      lastErr = err;
-      const wafBlocked = err?.payload?.kind === 'meshulam_waf_blocked';
-      if (!wafBlocked) throw err;
-      const hasNextAttempt = i < attempts.length - 1;
-      if (!hasNextAttempt) throw err;
-      try {
-        console.warn('[meshulam][waf] retrying without origin header');
-      } catch {}
-    }
+      if (String(process.env.MESHULAM_WAF_DEBUG || '') === '1') {
+        console.warn('[meshulam][waf] headers', resp?.headers || {});
+        console.warn('[meshulam][waf] body', rawText || '');
+      }
+    } catch {}
+    const err = new Error('Meshulam request blocked by WAF (Incapsula).');
+    err.status = resp.status || 502;
+    err.payload = { kind: 'meshulam_waf_blocked' };
+    throw err;
   }
-
-  throw lastErr;
+  if (resp.status >= 400 || data?.status !== 1) {
+    const err = new Error(data?.err || data?.message || `Meshulam error (status ${resp.status})`);
+    err.status = resp.status;
+    err.payload = data;
+    throw err;
+  }
+  return { ...data, pageCode };
 }
 
 export async function approveMeshulamTransaction({ settings, payload }) {
@@ -231,10 +231,16 @@ export function buildMeshulamApprovePayload({ settings, session, callback }) {
   const processToken = callback?.processToken || callback?.processTOKEN || session?.paymentDetails?.meshulam?.processToken || '';
   const transactionId = callback?.transactionId || callback?.transactionID || callback?.tranId || callback?.transaction || '';
   const sum = callback?.sum || session?.cardChargeAmount || session?.totalWithShipping || '';
+  const pageCode =
+    callback?.pageCode ||
+    callback?.pagecode ||
+    session?.paymentDetails?.meshulam?.pageCode ||
+    settings?.pageCode ||
+    MESHULAM_PAGE_CODES.generic;
 
   return {
-    userId: settings.userId || '',
-    pageCode: settings.pageCode || '',
+    userId: settings.userId || DEFAULT_USER_ID,
+    pageCode: pageCode || undefined,
     processId: processId || undefined,
     processToken: processToken || undefined,
     transactionId: transactionId || undefined,
