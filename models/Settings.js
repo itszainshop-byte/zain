@@ -848,7 +848,8 @@ settingsSchema.add({
     reminderWhatsAppEnabled: { type: Boolean, default: false },
     twilioAccountSid: { type: String, default: '' },
     twilioAuthToken: { type: String, default: '' },
-    twilioWhatsAppFrom: { type: String, default: '' }
+    twilioWhatsAppFrom: { type: String, default: '' },
+    twilioMessagingServiceSid: { type: String, default: '' }
   }
 });
 

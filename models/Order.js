@@ -77,7 +77,7 @@ const orderSchema = new mongoose.Schema({
     country: {
       type: String,
       required: true,
-      enum: ['JO', 'SA', 'AE', 'KW', 'QA', 'BH', 'OM', 'EG', 'IQ', 'LB', 'PS']
+      enum: ['JO', 'SA', 'AE', 'KW', 'QA', 'BH', 'OM', 'EG', 'IQ', 'LB', 'IL']
     }
   },
   customerInfo: {
