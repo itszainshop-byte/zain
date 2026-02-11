@@ -4,12 +4,12 @@ import Settings from '../models/Settings.js';
 const DEFAULT_CREATE_URL = 'https://sandbox.meshulam.co.il/api/light/server/1.0/createPaymentProcess';
 const DEFAULT_APPROVE_URL = 'https://sandbox.meshulam.co.il/api/light/server/1.0/approveTransaction';
 
-// Grow/Meshulam demo identifiers shared by the docs (non-secret).
-const DEFAULT_USER_ID = '4ec1d595ae764243';
+// Tenant defaults (provided by user, non-secret).
+const DEFAULT_USER_ID = '4d405ec9bd740efd';
 export const MESHULAM_PAGE_CODES = {
   sdkwallet: 'c34d1f4a546f',
   generic: 'b73ca07591f8',
-  creditcard: '0b7a16e03b25',
+  creditcard: '76195ea4fc1a',
   googlepay: '77a2993849cd',
   applepay: '9eeea7787d67',
   bit: 'e20c9458e9f3',
@@ -23,7 +23,7 @@ export async function loadMeshulamSettings() {
     enabled: !!cfg.enabled,
     apiUrl: cfg.apiUrl || DEFAULT_CREATE_URL,
     approveUrl: cfg.approveUrl || DEFAULT_APPROVE_URL,
-    pageCode: cfg.pageCode || MESHULAM_PAGE_CODES.generic,
+    pageCode: cfg.pageCode || MESHULAM_PAGE_CODES.creditcard,
     userId: cfg.userId || DEFAULT_USER_ID,
     apiKey: cfg.apiKey || '',
     successUrl: cfg.successUrl || '',
@@ -109,6 +109,44 @@ function pickFirst(raw, keys) {
     return v;
   }
   return undefined;
+}
+
+function hasValue(v) {
+  if (v === undefined || v === null) return false;
+  if (typeof v === 'string') return v.trim().length > 0;
+  return true;
+}
+
+const APPROVE_REQUIRED_FIELDS = [
+  'pageCode',
+  'userId',
+  'transactionId',
+  'transactionToken',
+  'transactionTypeId',
+  'paymentType',
+  'sum',
+  'firstPaymentSum',
+  'periodicalPaymentSum',
+  'paymentsNum',
+  'allPaymentsNum',
+  'paymentDate',
+  'asmachta',
+  'description',
+  'fullName',
+  'payerPhone',
+  'payerEmail',
+  'cardSuffix',
+  'cardType',
+  'cardTypeCode',
+  'cardBrand',
+  'cardBrandCode',
+  'cardExp',
+  'processId',
+  'processToken'
+];
+
+export function findMissingApproveFields(payload = {}) {
+  return APPROVE_REQUIRED_FIELDS.filter((k) => !hasValue(payload[k]));
 }
 
 export function buildMeshulamCreateForm({ session, settings, origin, overrides = {} }) {
