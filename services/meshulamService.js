@@ -99,6 +99,18 @@ function resolveMeshulamPageCode({ settings, overrides }) {
   return settings?.pageCode || MESHULAM_PAGE_CODES.generic;
 }
 
+function pickFirst(raw, keys) {
+  if (!raw) return undefined;
+  for (const k of keys) {
+    const v = raw[k];
+    if (typeof v === 'undefined' || v === null) continue;
+    const s = String(v).trim();
+    if (s.length === 0) continue;
+    return v;
+  }
+  return undefined;
+}
+
 export function buildMeshulamCreateForm({ session, settings, origin, overrides = {} }) {
   const fullNameRaw = `${session?.customerInfo?.firstName || ''} ${session?.customerInfo?.lastName || ''}`.trim();
   const fullName = normalizeMeshulamFullName(fullNameRaw || session?.customerInfo?.email || '');
@@ -227,24 +239,63 @@ export async function approveMeshulamTransaction({ settings, payload }) {
 }
 
 export function buildMeshulamApprovePayload({ settings, session, callback }) {
-  const processId = callback?.processId || callback?.processID || session?.paymentDetails?.meshulam?.processId || '';
-  const processToken = callback?.processToken || callback?.processTOKEN || session?.paymentDetails?.meshulam?.processToken || '';
-  const transactionId = callback?.transactionId || callback?.transactionID || callback?.tranId || callback?.transaction || '';
-  const sum = callback?.sum || session?.cardChargeAmount || session?.totalWithShipping || '';
+  const cb = callback || {};
+  const processId = pickFirst(cb, ['processId', 'processID', 'processid']) || session?.paymentDetails?.meshulam?.processId || '';
+  const processToken = pickFirst(cb, ['processToken', 'processTOKEN', 'processTOKEN', 'processtoken']) || session?.paymentDetails?.meshulam?.processToken || '';
+  const transactionId = pickFirst(cb, ['transactionId', 'transactionID', 'tranId', 'transaction', 'tranid']) || '';
+  const transactionToken = pickFirst(cb, ['transactionToken', 'transactionTOKEN', 'trantoken', 'transactiontoken', 'tranToken']) || '';
+  const transactionTypeId = pickFirst(cb, ['transactionTypeId', 'transactiontypeid', 'transactionTypeID']);
+  const paymentType = pickFirst(cb, ['paymentType', 'paymenttype', 'paymenttypeid']);
+  const sum = pickFirst(cb, ['sum', 'amount']) || session?.cardChargeAmount || session?.totalWithShipping || '';
+  const firstPaymentSum = pickFirst(cb, ['firstPaymentSum', 'firstPayment']);
+  const periodicalPaymentSum = pickFirst(cb, ['periodicalPaymentSum', 'periodicalPayment', 'periodicPayment']);
+  const paymentsNum = pickFirst(cb, ['paymentsNum', 'payments', 'paymentNumber']);
+  const allPaymentsNum = pickFirst(cb, ['allPaymentsNum', 'totalPayments', 'paymentsTotal']);
+  const paymentDate = pickFirst(cb, ['paymentDate', 'date']);
+  const asmachta = pickFirst(cb, ['asmachta', 'approvalCode', 'authNumber']);
+  const description = pickFirst(cb, ['description']) || `Order ${session?.reference || session?._id || ''}`;
+  const fullName = normalizeMeshulamFullName(
+    pickFirst(cb, ['fullName', 'fullname', 'payerName']) ||
+      `${session?.customerInfo?.firstName || ''} ${session?.customerInfo?.lastName || ''}` ||
+      session?.customerInfo?.email || ''
+  );
+  const payerPhone = normalizeMeshulamPhone(pickFirst(cb, ['payerPhone', 'phone']) || session?.customerInfo?.mobile || '');
+  const payerEmail = pickFirst(cb, ['payerEmail', 'email']) || session?.customerInfo?.email || '';
+  const cardSuffix = pickFirst(cb, ['cardSuffix', 'cardLast4', 'last4']);
+  const cardType = pickFirst(cb, ['cardType', 'cardtype']);
+  const cardTypeCode = pickFirst(cb, ['cardTypeCode', 'cardtypecode']);
+  const cardBrand = pickFirst(cb, ['cardBrand', 'cardbrand', 'brand']);
+  const cardBrandCode = pickFirst(cb, ['cardBrandCode', 'cardbrandcode']);
+  const cardExp = pickFirst(cb, ['cardExp', 'cardexp', 'exp']);
   const pageCode =
-    callback?.pageCode ||
-    callback?.pagecode ||
-    session?.paymentDetails?.meshulam?.pageCode ||
-    settings?.pageCode ||
-    MESHULAM_PAGE_CODES.generic;
+    pickFirst(cb, ['pageCode', 'pagecode']) || session?.paymentDetails?.meshulam?.pageCode || settings?.pageCode || MESHULAM_PAGE_CODES.generic;
 
   return {
     userId: settings.userId || DEFAULT_USER_ID,
     pageCode: pageCode || undefined,
-    processId: processId || undefined,
-    processToken: processToken || undefined,
     transactionId: transactionId || undefined,
-    sum: sum || undefined
+    transactionToken: transactionToken || undefined,
+    transactionTypeId: normalizeNumber(transactionTypeId, undefined),
+    paymentType: normalizeNumber(paymentType, undefined),
+    sum: sum || undefined,
+    firstPaymentSum: normalizeNumber(firstPaymentSum, undefined),
+    periodicalPaymentSum: normalizeNumber(periodicalPaymentSum, undefined),
+    paymentsNum: normalizeNumber(paymentsNum, undefined),
+    allPaymentsNum: normalizeNumber(allPaymentsNum, undefined),
+    paymentDate: paymentDate || undefined,
+    asmachta: asmachta || undefined,
+    description: description || undefined,
+    fullName: fullName || undefined,
+    payerPhone: payerPhone || undefined,
+    payerEmail: payerEmail || undefined,
+    cardSuffix: cardSuffix || undefined,
+    cardType: cardType || undefined,
+    cardTypeCode: normalizeNumber(cardTypeCode, undefined),
+    cardBrand: cardBrand || undefined,
+    cardBrandCode: normalizeNumber(cardBrandCode, undefined),
+    cardExp: cardExp || undefined,
+    processId: processId || undefined,
+    processToken: processToken || undefined
   };
 }
 
