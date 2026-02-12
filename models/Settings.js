@@ -908,7 +908,8 @@ settingsSchema.add({
       apiKey: { type: String, default: '' },
       successUrl: { type: String, default: '' },
       cancelUrl: { type: String, default: '' },
-      notifyUrl: { type: String, default: '' }
+      notifyUrl: { type: String, default: '' },
+      allowInsecureRedirects: { type: Boolean, default: false }
     },
     // Visibility / availability flags for each checkout payment option
     visibility: {
@@ -1092,7 +1093,8 @@ settingsSchema.statics.createDefaultSettings = async function() {
             apiKey: '',
             successUrl: '',
             cancelUrl: '',
-            notifyUrl: ''
+            notifyUrl: '',
+            allowInsecureRedirects: false
           },
           visibility: {
             card: true,
@@ -1150,7 +1152,8 @@ settingsSchema.statics.createDefaultSettings = async function() {
             apiKey: '',
             successUrl: '',
             cancelUrl: '',
-            notifyUrl: ''
+            notifyUrl: '',
+            allowInsecureRedirects: false
           }
         };
         needsUpdate = true;

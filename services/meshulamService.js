@@ -28,7 +28,8 @@ export async function loadMeshulamSettings() {
     apiKey: cfg.apiKey || '',
     successUrl: cfg.successUrl || '',
     cancelUrl: cfg.cancelUrl || '',
-    notifyUrl: cfg.notifyUrl || ''
+    notifyUrl: cfg.notifyUrl || '',
+    allowInsecureRedirects: !!cfg.allowInsecureRedirects
   };
 }
 
@@ -54,15 +55,19 @@ function normalizeMeshulamFullName(fullNameRaw) {
   return 'Customer Name';
 }
 
-function isPublicHttpsUrl(value) {
+function isLocalhostHost(hostname) {
+  if (!hostname) return false;
+  const lower = hostname.toLowerCase();
+  return lower === 'localhost' || lower === '127.0.0.1' || lower === '[::1]' || lower.endsWith('.local');
+}
+
+function isAllowedReturnUrl(value, { allowInsecure }) {
   if (!value) return false;
   try {
     const url = new URL(String(value));
-    if (url.protocol !== 'https:') return false;
-    const host = url.hostname.toLowerCase();
-    if (host === 'localhost' || host === '127.0.0.1') return false;
-    if (host.endsWith('.local')) return false;
-    return true;
+    if (url.protocol === 'https:') return true;
+    if (allowInsecure && url.protocol === 'http:' && isLocalhostHost(url.hostname)) return true;
+    return false;
   } catch {
     return false;
   }
@@ -162,13 +167,15 @@ export function buildMeshulamCreateForm({ session, settings, origin, overrides =
   const cancelUrl = overrides.cancelUrl || settings.cancelUrl || (origin ? `${origin}/cart` : '');
   const notifyUrl = overrides.notifyUrl || settings.notifyUrl || (origin ? `${origin}/api/meshulam/callback` : '');
 
-  if (!isPublicHttpsUrl(successUrl)) {
+  const allowInsecure = settings.allowInsecureRedirects || String(process.env.MESHULAM_ALLOW_INSECURE_URLS || '') === '1';
+
+  if (!isAllowedReturnUrl(successUrl, { allowInsecure })) {
     throw new Error('meshulam_invalid_success_url');
   }
-  if (!isPublicHttpsUrl(cancelUrl)) {
+  if (!isAllowedReturnUrl(cancelUrl, { allowInsecure })) {
     throw new Error('meshulam_invalid_cancel_url');
   }
-  if (!isPublicHttpsUrl(notifyUrl)) {
+  if (!isAllowedReturnUrl(notifyUrl, { allowInsecure })) {
     throw new Error('meshulam_invalid_notify_url');
   }
 
