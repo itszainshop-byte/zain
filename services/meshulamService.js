@@ -89,6 +89,15 @@ function isAllowedReturnUrl(value, { allowInsecure }) {
   }
 }
 
+function isLocalHttpUrl(value) {
+  try {
+    const url = new URL(String(value));
+    return url.protocol === 'http:' && isLocalhostHost(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function buildTotalAmount(session) {
   const itemsTotal = (session.items || []).reduce((sum, item) => {
     const qty = normalizeNumber(item.quantity, 0);
@@ -183,7 +192,12 @@ export function buildMeshulamCreateForm({ session, settings, origin, overrides =
   const cancelUrl = overrides.cancelUrl || settings.cancelUrl || (origin ? `${origin}/cart` : '');
   const notifyUrl = overrides.notifyUrl || settings.notifyUrl || (origin ? `${origin}/api/meshulam/callback` : '');
 
-  const allowInsecure = settings.allowInsecureRedirects || String(process.env.MESHULAM_ALLOW_INSECURE_URLS || '') === '1';
+  const allowInsecure =
+    settings.allowInsecureRedirects ||
+    String(process.env.MESHULAM_ALLOW_INSECURE_URLS || '') === '1' ||
+    isLocalHttpUrl(successUrl) ||
+    isLocalHttpUrl(cancelUrl) ||
+    isLocalHttpUrl(notifyUrl);
 
   if (!isAllowedReturnUrl(successUrl, { allowInsecure })) {
     throw new Error('meshulam_invalid_success_url');
