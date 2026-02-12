@@ -17,6 +17,22 @@ export const MESHULAM_PAGE_CODES = {
 };
 
 export async function loadMeshulamSettings() {
+  if (process.env.SKIP_DB === '1') {
+    const port = process.env.PORT || 5000;
+    const origin = process.env.PUBLIC_URL || `http://localhost:${port}`;
+    return {
+      enabled: true,
+      apiUrl: DEFAULT_CREATE_URL,
+      approveUrl: DEFAULT_APPROVE_URL,
+      pageCode: MESHULAM_PAGE_CODES.creditcard,
+      userId: DEFAULT_USER_ID,
+      apiKey: '',
+      successUrl: `${origin}/payment/return`,
+      cancelUrl: `${origin}/cart`,
+      notifyUrl: `${origin}/api/meshulam/callback`,
+      allowInsecureRedirects: true
+    };
+  }
   const settings = await Settings.findOne().lean().exec();
   const cfg = settings?.payments?.meshulam || {};
   return {
@@ -202,6 +218,19 @@ export function buildMeshulamCreateForm({ session, settings, origin, overrides =
 }
 
 export async function requestMeshulamPaymentProcess({ session, settings, origin, overrides = {} }) {
+  if (process.env.SKIP_DB === '1') {
+    const pageCode = resolveMeshulamPageCode({ settings, overrides });
+    return {
+      status: 1,
+      message: 'mocked in SKIP_DB mode',
+      data: {
+        processId: `mock-${Date.now()}`,
+        processToken: `token-${Math.random().toString(36).slice(2, 10)}`,
+        url: `${origin || 'http://localhost'}#/mock-meshulam`
+      },
+      pageCode
+    };
+  }
   const { payload, pageCode } = buildMeshulamCreateForm({ session, settings, origin, overrides });
   const url = settings.apiUrl || DEFAULT_CREATE_URL;
   const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';

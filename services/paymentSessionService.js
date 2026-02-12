@@ -200,6 +200,15 @@ function wrapStorageQuotaError(err) {
 }
 
 export async function createPaymentSessionDocument(payload) {
+  if (process.env.SKIP_DB === '1') {
+    const id = new mongoose.Types.ObjectId();
+    const doc = {
+      _id: id,
+      ...payload,
+      save: async () => doc
+    };
+    return doc;
+  }
   try {
     return await PaymentSession.create(payload);
   } catch (err) {
