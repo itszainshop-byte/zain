@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import mongoose from 'mongoose';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
@@ -7,8 +8,10 @@ import PaymentSession from '../models/PaymentSession.js';
 import { adminAuth } from '../middleware/auth.js';
 import { loadSettings, requestICreditPaymentUrl, buildICreditRequest, buildICreditCandidates, diagnoseICreditConnectivity, pingICredit } from '../services/icreditService.js';
 import { finalizePaymentSessionToOrder, createPaymentSessionDocument } from '../services/paymentSessionService.js';
+import { createGrowPayment, approveGrowTransaction, loadGrowConfig } from '../services/growPaymentService.js';
 
 const router = express.Router();
+const upload = multer();
 
 // iCredit IPN webhook (public)
 // Optional source IP allowlist: set ICREDIT_IPN_ALLOWED_IPS as comma-separated IPv4 list to enforce
@@ -175,6 +178,15 @@ function deriveOrigin(req) {
   const proto = (h['x-forwarded-proto'] || '').split(',')[0] || 'http';
   if (host) return `${proto}://${host}`;
   return process.env.FRONTEND_BASE_URL || '';
+}
+
+// Build base API URL (protocol + host) for server-generated callbacks
+function deriveServerBase(req) {
+  const h = req.headers || {};
+  const host = String(h['x-forwarded-host'] || h.host || '').split(',')[0].trim();
+  if (!host) return '';
+  const proto = (String(h['x-forwarded-proto'] || '')).split(',')[0] || (req.protocol || 'https');
+  return `${proto}://${host}`.replace(/\/$/, '');
 }
 
 // Best-effort client IPv4 extractor (for gateways that require an IPAddress field)
@@ -442,5 +454,202 @@ router.get('/icredit/debug-runtime', adminAuth, (req, res) => {
     return res.json({ ok: true, trustProxy, ip: { fromHeaders, fromEnv, fromQuery } , env });
   } catch (e) {
     return res.status(500).json({ ok: false, message: e?.message || 'debug_failed' });
+  }
+});
+
+// --- Grow / Meshulam (iframe-friendly) ---
+router.post('/grow/create-session-from-cart', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const { items, shippingAddress, customerInfo, currency, shippingFee, coupon } = body;
+    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'items required' });
+    if (!shippingAddress?.street || !shippingAddress?.city || !shippingAddress?.country) return res.status(400).json({ message: 'invalid_shipping' });
+    if (!customerInfo?.email || !customerInfo?.mobile) return res.status(400).json({ message: 'invalid_customer' });
+    if (!currency) return res.status(400).json({ message: 'currency required' });
+
+    let sessionGiftCard = undefined;
+    try {
+      const rawGift = body?.giftCard;
+      if (rawGift && rawGift.code) {
+        const code = String(rawGift.code).trim();
+        const amt = Number(rawGift.amount);
+        if (code && Number.isFinite(amt) && amt > 0) {
+          sessionGiftCard = { code, amount: amt };
+        }
+      }
+    } catch {}
+
+    const ps = await createPaymentSessionDocument({
+      gateway: 'grow',
+      status: 'created',
+      reference: `PS-${Date.now()}`,
+      items: items.map((it) => ({
+        product: it.product,
+        quantity: it.quantity,
+        price: it.price,
+        size: it.size,
+        color: (typeof it.color === 'string' ? it.color : (it.color?.name || it.color?.code || undefined)),
+        variantId: it.variantId,
+        sku: it.sku,
+        variants: Array.isArray(it.variants) ? it.variants.map(v => ({
+          attributeId: v.attributeId || v.attribute || undefined,
+          attributeName: v.attributeName || v.name || undefined,
+          valueId: v.valueId || v.value || undefined,
+          valueName: v.valueName || v.valueLabel || v.label || undefined
+        })) : undefined
+      })),
+      shippingAddress: {
+        street: shippingAddress.street,
+        city: shippingAddress.city,
+        country: shippingAddress.country,
+        areaGroup: shippingAddress.areaGroup || shippingAddress.area_group || ''
+      },
+      customerInfo: {
+        firstName: customerInfo.firstName,
+        lastName: customerInfo.lastName,
+        email: customerInfo.email,
+        mobile: customerInfo.mobile,
+        secondaryMobile: customerInfo.secondaryMobile
+      },
+      coupon: coupon && coupon.code ? { code: coupon.code, discount: Number(coupon.discount) || 0 } : undefined,
+      giftCard: sessionGiftCard,
+      currency,
+      shippingFee: Number(shippingFee) || 0,
+      totalWithShipping: Number(body?.totalWithShipping) || undefined
+    });
+
+    // Compute payable amount (after coupon/gift) with safe fallbacks
+    const sumFromBody = Number(body?.totalWithShipping);
+    const shippingVal = Number(shippingFee) || 0;
+    let payableTotal = Number.isFinite(sumFromBody) && sumFromBody > 0 ? sumFromBody : 0;
+    if (!payableTotal) {
+      payableTotal = items.reduce((acc, it) => {
+        const qty = Number(it.quantity) || 0;
+        const price = Number(it.price) || 0;
+        return acc + (price > 0 && qty > 0 ? price * qty : 0);
+      }, 0);
+      payableTotal += shippingVal;
+      const couponDiscount = Number(coupon?.discount) || 0;
+      if (couponDiscount > 0) payableTotal = Math.max(0, payableTotal - couponDiscount);
+      if (sessionGiftCard?.amount) payableTotal = Math.max(0, payableTotal - sessionGiftCard.amount);
+    }
+    ps.cardChargeAmount = payableTotal;
+    await ps.save();
+
+    const cfg = await loadGrowConfig();
+    const origin = deriveOrigin(req);
+    const serverBase = deriveServerBase(req);
+    const successUrl = origin ? `${origin}/payment/return?provider=grow&session=${ps._id}` : '';
+    const cancelUrl = origin ? `${origin}/cart` : '';
+    const notifyUrl = serverBase ? `${serverBase}/api/payments/grow/callback` : '';
+    const description = body.description || `Order ${ps.reference}`;
+    const fullName = `${customerInfo.firstName || ''} ${customerInfo.lastName || ''}`.trim() || 'Customer';
+
+    const { paymentUrl, raw } = await createGrowPayment({
+      userId: cfg.userId,
+      pageCode: cfg.pageCode,
+      apiBase: cfg.apiBase,
+      sum: payableTotal,
+      successUrl,
+      cancelUrl,
+      description,
+      fullName,
+      phone: customerInfo.mobile,
+      email: customerInfo.email,
+      cField1: String(ps._id),
+      notifyUrl,
+      customFields: { cField1: String(ps._id) }
+    });
+
+    if (!paymentUrl) {
+      return res.status(502).json({ message: 'grow_payment_url_missing', detail: raw || null });
+    }
+
+    ps.paymentDetails = { gateway: 'grow', createResponse: raw, successUrl, cancelUrl, notifyUrl };
+    await ps.save();
+
+    return res.json({ ok: true, sessionId: String(ps._id), paymentUrl, status: ps.status });
+  } catch (e) {
+    try { console.error('[payments][grow][create-session]', e?.message || e); } catch {}
+    return res.status(400).json({ message: 'grow_session_failed', detail: e?.message || String(e) });
+  }
+});
+
+// Grow server-to-server callback + approval
+router.post('/grow/callback', upload.none(), async (req, res) => {
+  const payload = req.body || {};
+  const sessionId = String(payload?.cField1 || payload?.Custom1 || payload?.customField1 || payload?.sessionId || payload?.session || '').trim();
+  let approveResult = null;
+  let order = null;
+  try {
+    const cfg = await loadGrowConfig();
+    approveResult = await approveGrowTransaction(payload, cfg).catch((err) => {
+      console.warn('[payments][grow][approve] failed', err?.message || err);
+      return { error: err?.message || 'approve_failed', response: err?.response };
+    });
+
+    if (sessionId) {
+      const ps = await PaymentSession.findById(sessionId);
+      if (ps) {
+        ps.status = 'approved';
+        ps.paymentDetails = {
+          ...(ps.paymentDetails || {}),
+          gateway: 'grow',
+          callback: payload,
+          approve: approveResult?.data || approveResult?.response || null
+        };
+        await ps.save();
+        try {
+          const { order: ord } = await finalizePaymentSessionToOrder(ps, {
+            paymentMethod: 'card',
+            paymentStatus: 'completed',
+            paymentDetails: ps.paymentDetails || payload
+          });
+          order = ord;
+          ps.status = 'confirmed';
+          await ps.save();
+        } catch (err) {
+          console.warn('[payments][grow][finalize] failed', err?.message || err);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[payments][grow][callback] error', err?.message || err);
+  }
+
+  return res.json({ ok: true, sessionId: sessionId || null, order: order ? { _id: order._id, orderNumber: order.orderNumber } : null });
+});
+
+// Poll Grow payment session status
+router.get('/grow/session/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const ps = await PaymentSession.findById(id).lean();
+    if (!ps) return res.status(404).json({ message: 'session_not_found' });
+    const order = ps.orderId ? await Order.findById(ps.orderId).select('orderNumber paymentStatus shippingFee').lean() : null;
+    return res.json({ ok: true, status: ps.status, order });
+  } catch (e) {
+    return res.status(500).json({ message: 'grow_status_failed', detail: e?.message || String(e) });
+  }
+});
+
+// Idempotent confirm (in case callback arrived before frontend polling)
+router.post('/grow/session/confirm', async (req, res) => {
+  try {
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ message: 'sessionId required' });
+    const ps = await PaymentSession.findById(sessionId);
+    if (!ps) return res.status(404).json({ message: 'session_not_found' });
+    const { order } = await finalizePaymentSessionToOrder(ps, {
+      paymentMethod: 'card',
+      paymentStatus: 'completed',
+      paymentDetails: ps.paymentDetails || {}
+    });
+    ps.status = 'confirmed';
+    ps.orderId = order?._id || ps.orderId;
+    await ps.save();
+    return res.json({ ok: true, order: { _id: order._id, orderNumber: order.orderNumber, shippingFee: order.shippingFee || order.deliveryFee || 0 } });
+  } catch (e) {
+    return res.status(400).json({ message: 'grow_confirm_failed', detail: e?.message || String(e) });
   }
 });
