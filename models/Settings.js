@@ -898,13 +898,14 @@ settingsSchema.add({
     },
     // Meshulam (Grow) Light API integration
     meshulam: {
-      enabled: { type: Boolean, default: false },
+      enabled: { type: Boolean, default: true },
       // Create payment process URL
       apiUrl: { type: String, default: 'https://sandbox.meshulam.co.il/api/light/server/1.0/createPaymentProcess' },
       // Approve transaction URL
       approveUrl: { type: String, default: 'https://sandbox.meshulam.co.il/api/light/server/1.0/approveTransaction' },
-      pageCode: { type: String, default: '' },
-      userId: { type: String, default: '' },
+      // Grow sandbox defaults from provided merchant
+      pageCode: { type: String, default: '76195ea4fc1a' },
+      userId: { type: String, default: '4d405ec9bd740efd' },
       apiKey: { type: String, default: '' },
       successUrl: { type: String, default: '' },
       cancelUrl: { type: String, default: '' },
@@ -1085,11 +1086,11 @@ settingsSchema.statics.createDefaultSettings = async function() {
             defaultDiscount: 0
           },
           meshulam: {
-            enabled: false,
+            enabled: true,
             apiUrl: 'https://sandbox.meshulam.co.il/api/light/server/1.0/createPaymentProcess',
             approveUrl: 'https://sandbox.meshulam.co.il/api/light/server/1.0/approveTransaction',
-            pageCode: '',
-            userId: '',
+            pageCode: '76195ea4fc1a',
+            userId: '4d405ec9bd740efd',
             apiKey: '',
             successUrl: '',
             cancelUrl: '',
@@ -1144,11 +1145,11 @@ settingsSchema.statics.createDefaultSettings = async function() {
         updateData.payments = {
           ...(updateData.payments || settings.payments),
           meshulam: {
-            enabled: false,
+            enabled: true,
             apiUrl: 'https://sandbox.meshulam.co.il/api/light/server/1.0/createPaymentProcess',
             approveUrl: 'https://sandbox.meshulam.co.il/api/light/server/1.0/approveTransaction',
-            pageCode: '',
-            userId: '',
+            pageCode: '76195ea4fc1a',
+            userId: '4d405ec9bd740efd',
             apiKey: '',
             successUrl: '',
             cancelUrl: '',

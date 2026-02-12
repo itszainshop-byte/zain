@@ -16,36 +16,64 @@ export const MESHULAM_PAGE_CODES = {
   bitqr: '39bf173ce7d0'
 };
 
+function parseBooleanEnv(value, fallback = false) {
+  if (typeof value === 'undefined' || value === null) return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
 export async function loadMeshulamSettings() {
+  // Environment overrides let us enable and configure Grow/Meshulam without DB writes (Cloud Run / Netlify vars)
+  const envEnabledRaw = process.env.MESHULAM_ENABLED;
+  const envApiUrl = process.env.MESHULAM_API_URL;
+  const envApproveUrl = process.env.MESHULAM_APPROVE_URL;
+  const envPageCode = process.env.MESHULAM_PAGE_CODE;
+  const envUserId = process.env.MESHULAM_USER_ID;
+  const envApiKey = process.env.MESHULAM_API_KEY;
+  const envSuccessUrl = process.env.MESHULAM_SUCCESS_URL;
+  const envCancelUrl = process.env.MESHULAM_CANCEL_URL;
+  const envNotifyUrl = process.env.MESHULAM_NOTIFY_URL;
+  const envAllowInsecureRaw = process.env.MESHULAM_ALLOW_INSECURE_URLS;
+
   if (process.env.SKIP_DB === '1') {
     const port = process.env.PORT || 5000;
     const origin = process.env.PUBLIC_URL || `http://localhost:${port}`;
     return {
-      enabled: true,
-      apiUrl: DEFAULT_CREATE_URL,
-      approveUrl: DEFAULT_APPROVE_URL,
-      pageCode: MESHULAM_PAGE_CODES.creditcard,
-      userId: DEFAULT_USER_ID,
-      apiKey: '',
-      successUrl: `${origin}/payment/return`,
-      cancelUrl: `${origin}/cart`,
-      notifyUrl: `${origin}/api/meshulam/callback`,
-      allowInsecureRedirects: true
+      enabled: parseBooleanEnv(envEnabledRaw, true),
+      apiUrl: envApiUrl || DEFAULT_CREATE_URL,
+      approveUrl: envApproveUrl || DEFAULT_APPROVE_URL,
+      pageCode: envPageCode || MESHULAM_PAGE_CODES.creditcard,
+      userId: envUserId || DEFAULT_USER_ID,
+      apiKey: envApiKey || '',
+      successUrl: envSuccessUrl || `${origin}/payment/return`,
+      cancelUrl: envCancelUrl || `${origin}/cart`,
+      notifyUrl: envNotifyUrl || `${origin}/api/meshulam/callback`,
+      allowInsecureRedirects: parseBooleanEnv(envAllowInsecureRaw, true)
     };
   }
+
   const settings = await Settings.findOne().lean().exec();
   const cfg = settings?.payments?.meshulam || {};
+
+  const enabled = typeof envEnabledRaw !== 'undefined'
+    ? parseBooleanEnv(envEnabledRaw, true)
+    : (typeof cfg.enabled === 'boolean' ? cfg.enabled : true);
+
+  const allowInsecure = parseBooleanEnv(envAllowInsecureRaw, cfg.allowInsecureRedirects);
+
   return {
-    enabled: !!cfg.enabled,
-    apiUrl: cfg.apiUrl || DEFAULT_CREATE_URL,
-    approveUrl: cfg.approveUrl || DEFAULT_APPROVE_URL,
-    pageCode: cfg.pageCode || MESHULAM_PAGE_CODES.creditcard,
-    userId: cfg.userId || DEFAULT_USER_ID,
-    apiKey: cfg.apiKey || '',
-    successUrl: cfg.successUrl || '',
-    cancelUrl: cfg.cancelUrl || '',
-    notifyUrl: cfg.notifyUrl || '',
-    allowInsecureRedirects: !!cfg.allowInsecureRedirects
+    enabled,
+    apiUrl: envApiUrl || cfg.apiUrl || DEFAULT_CREATE_URL,
+    approveUrl: envApproveUrl || cfg.approveUrl || DEFAULT_APPROVE_URL,
+    pageCode: envPageCode || cfg.pageCode || MESHULAM_PAGE_CODES.creditcard,
+    userId: envUserId || cfg.userId || DEFAULT_USER_ID,
+    apiKey: envApiKey || cfg.apiKey || '',
+    successUrl: envSuccessUrl || cfg.successUrl || '',
+    cancelUrl: envCancelUrl || cfg.cancelUrl || '',
+    notifyUrl: envNotifyUrl || cfg.notifyUrl || '',
+    allowInsecureRedirects: allowInsecure
   };
 }
 
