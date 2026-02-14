@@ -76,6 +76,11 @@ const normalizeE164 = (phone) => {
     return `+${DEFAULT_WHATSAPP_COUNTRY_CODE}${digits.slice(1)}`;
   }
 
+  // Handle local numbers missing the leading 0 (e.g. 598..., 2598...)
+  if (DEFAULT_WHATSAPP_COUNTRY_CODE && digits.length >= 7 && digits.length <= 11) {
+    return `+${DEFAULT_WHATSAPP_COUNTRY_CODE}${digits}`;
+  }
+
   return `+${digits}`;
 };
 
