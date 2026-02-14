@@ -102,6 +102,9 @@ const normalizeE164 = (phone) => {
 const normalizeWhatsAppAddress = (phone) => {
   const e164 = normalizeE164(phone);
   if (!e164) return '';
+  const digits = e164.replace(/\D/g, '');
+  // Twilio generally expects 8-15 digits; reject clearly invalid lengths
+  if (digits.length < 8 || digits.length > 15) return '';
   return `whatsapp:${e164}`;
 };
 
@@ -178,7 +181,13 @@ export function startCheckoutDraftReminderScheduler() {
         try {
           const phone = resolvePhone(draft);
           const to = normalizeWhatsAppAddress(phone);
-          if (!to) continue;
+          if (!to) {
+            console.warn('[reminder] Skipping draft due to invalid phone', {
+              id: draft?._id,
+              rawPhone: phone
+            });
+            continue;
+          }
           const message = buildMessage(template, resolveName(draft), discountCode, checkoutUrl);
 
           const result = await sendWhatsAppViaTwilio({
@@ -210,6 +219,7 @@ export function startCheckoutDraftReminderScheduler() {
             status,
             twilioCode,
             detail,
+            rawPhone: resolvePhone(draft),
             to: normalizeWhatsAppAddress(resolvePhone(draft)),
             hasFrom: !!from,
             hasMessagingServiceSid: !!messagingServiceSid
