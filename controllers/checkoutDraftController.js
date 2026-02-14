@@ -1,4 +1,80 @@
+import axios from 'axios';
 import CheckoutDraft from '../models/CheckoutDraft.js';
+import Settings from '../models/Settings.js';
+
+const envTwilio = {
+  enabled: String(process.env.TWILIO_WHATSAPP_AUTO_ENABLED || '').trim() === '1',
+  accountSid: process.env.TWILIO_ACCOUNT_SID || '',
+  authToken: process.env.TWILIO_AUTH_TOKEN || '',
+  from: process.env.TWILIO_WHATSAPP_FROM || '',
+  messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID || ''
+};
+
+const resolveName = (draft) => {
+  const contactName = draft?.contact?.name || `${draft?.contact?.firstName || ''} ${draft?.contact?.lastName || ''}`.trim();
+  if (contactName) return contactName;
+  const payloadName = `${draft?.payload?.firstName || ''} ${draft?.payload?.lastName || ''}`.trim();
+  return payloadName || 'Guest';
+};
+
+const resolvePhone = (draft) => {
+  return draft?.contact?.mobile || draft?.payload?.mobile || draft?.payload?.phone || '';
+};
+
+const buildMessage = (template, name, discountCode, checkoutUrl) => {
+  const fallback = 'Hi {{name}}, we saved your checkout details. Use code {{discountCode}} to finish here: {{checkoutUrl}}';
+  const msg = (template && String(template).trim()) ? template : fallback;
+  return msg
+    .replace(/\{\{name\}\}/g, name || 'Guest')
+    .replace(/\{\{discountCode\}\}/g, discountCode || '')
+    .replace(/\{\{checkoutUrl\}\}/g, checkoutUrl || '');
+};
+
+const buildWhatsappLink = (phone, message) => {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return null;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+};
+
+const normalizeE164 = (phone) => {
+  const raw = String(phone || '').trim();
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+  return `+${digits}`;
+};
+
+const normalizeWhatsAppAddress = (phone) => {
+  const e164 = normalizeE164(phone);
+  if (!e164) return '';
+  return `whatsapp:${e164}`;
+};
+
+const normalizeFromAddress = (from) => {
+  const raw = String(from || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('whatsapp:')) return raw;
+  if (raw.startsWith('+')) return `whatsapp:${raw}`;
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+  return `whatsapp:+${digits}`;
+};
+
+const sendWhatsAppViaTwilio = async ({ accountSid, authToken, from, messagingServiceSid, to, body }) => {
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+  const payload = new URLSearchParams();
+  if (messagingServiceSid) {
+    payload.set('MessagingServiceSid', messagingServiceSid);
+  } else {
+    payload.set('From', from);
+  }
+  payload.set('To', to);
+  payload.set('Body', body);
+  const response = await axios.post(url, payload.toString(), {
+    auth: { username: accountSid, password: authToken },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+  });
+  return response?.data || null;
+};
 
 const VALID_SOURCES = new Set(['web', 'mobile', 'unknown']);
 
@@ -140,6 +216,66 @@ export const listCheckoutDrafts = async (req, res) => {
   } catch (error) {
     console.error('listCheckoutDrafts failed', error);
     return res.status(500).json({ message: 'Failed to load drafts' });
+  }
+};
+
+export const sendCheckoutDraftReminder = async (req, res) => {
+  try {
+    const { id } = req.params || {};
+    if (!id) return res.status(400).json({ message: 'id is required' });
+
+    const draft = await CheckoutDraft.findById(id);
+    if (!draft) return res.status(404).json({ message: 'Draft not found' });
+
+    const settings = await Settings.findOne();
+    const cf = settings?.checkoutForm || {};
+
+    const template = cf.reminderMessageTemplate || '';
+    const checkoutUrl = cf.reminderCheckoutUrl || '';
+    const discountCode = cf.reminderDiscountCode || '';
+
+    const whatsappEnabled = cf.reminderWhatsAppEnabled != null
+      ? !!cf.reminderWhatsAppEnabled
+      : envTwilio.enabled;
+    const accountSid = String(cf.twilioAccountSid || envTwilio.accountSid || '').trim();
+    const authToken = String(cf.twilioAuthToken || envTwilio.authToken || '').trim();
+    const from = normalizeFromAddress(cf.twilioWhatsAppFrom || envTwilio.from || '');
+    const messagingServiceSid = String(cf.twilioMessagingServiceSid || envTwilio.messagingServiceSid || '').trim();
+
+    if (!whatsappEnabled) return res.status(400).json({ message: 'WhatsApp reminders are disabled' });
+    if (!accountSid || !authToken || (!from && !messagingServiceSid)) {
+      return res.status(400).json({ message: 'Twilio credentials are not configured' });
+    }
+
+    const phone = resolvePhone(draft);
+    const to = normalizeWhatsAppAddress(phone);
+    if (!to) return res.status(400).json({ message: 'No phone number available for this draft' });
+
+    const body = buildMessage(template, resolveName(draft), discountCode, checkoutUrl);
+
+    const result = await sendWhatsAppViaTwilio({
+      accountSid,
+      authToken,
+      from,
+      messagingServiceSid,
+      to,
+      body
+    });
+
+    const customNote = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+    const link = buildWhatsappLink(phone, body);
+    const note = `Manual WhatsApp sent (Twilio): ${result?.sid || 'unknown'}${link ? `\n${link}` : ''}${customNote ? `\n${customNote}` : ''}`;
+
+    draft.lastReminderAt = new Date();
+    draft.lastReminderChannel = 'whatsapp-admin';
+    draft.reminderCount = Number(draft.reminderCount || 0) + 1;
+    draft.reminderNote = draft.reminderNote ? `${draft.reminderNote}\n${note}` : note;
+    await draft.save();
+
+    return res.json({ ok: true, sid: result?.sid || null, to, message: body });
+  } catch (error) {
+    console.error('sendCheckoutDraftReminder failed', error?.response?.data || error);
+    return res.status(500).json({ message: 'Failed to send reminder' });
   }
 };
 

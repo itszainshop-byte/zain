@@ -7,7 +7,8 @@ import {
   buildMeshulamCreateForm,
   buildMeshulamApprovePayload,
   approveMeshulamTransaction,
-  getMeshulamCallbackSessionId
+  getMeshulamCallbackSessionId,
+  findMissingApproveFields
 } from '../services/meshulamService.js';
 
 function deriveOrigin(req) {
@@ -159,6 +160,12 @@ export const meshulamCallbackHandler = asyncHandler(async (req, res) => {
   try {
     const settings = await loadMeshulamSettings();
     const approvePayload = buildMeshulamApprovePayload({ settings, session, callback: payload });
+    const missing = findMissingApproveFields(approvePayload);
+    if (missing.length) {
+      session.paymentDetails.meshulam.approveMissing = missing;
+      await session.save();
+      return res.json({ ok: true, missing });
+    }
     try {
       const approveRes = await approveMeshulamTransaction({ settings, payload: approvePayload });
       session.paymentDetails.meshulam.approve = approveRes;

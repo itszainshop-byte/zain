@@ -253,6 +253,7 @@ router.get('/', async (req, res) => {
           enabled: !!obj.payments.meshulam.enabled,
           apiUrl: obj.payments.meshulam.apiUrl || 'https://sandbox.meshulam.co.il/api/light/server/1.0/createPaymentProcess',
           approveUrl: obj.payments.meshulam.approveUrl || 'https://sandbox.meshulam.co.il/api/light/server/1.0/approveTransaction',
+          pageType: obj.payments.meshulam.pageType || '',
           pageCode: obj.payments.meshulam.pageCode || '',
           userId: obj.payments.meshulam.userId || '',
           apiKey: obj.payments.meshulam.apiKey ? '***' : '',
@@ -2545,6 +2546,7 @@ router.get('/payments/meshulam', async (req, res) => {
       enabled: !!m.enabled,
       apiUrl: m.apiUrl || 'https://sandbox.meshulam.co.il/api/light/server/1.0/createPaymentProcess',
       approveUrl: m.approveUrl || 'https://sandbox.meshulam.co.il/api/light/server/1.0/approveTransaction',
+      pageType: m.pageType || '',
       pageCode: m.pageCode || '',
       userId: m.userId || '',
       apiKey: m.apiKey ? '***' : '',
@@ -2568,6 +2570,7 @@ router.put('/payments/meshulam', adminAuth, async (req, res) => {
     if (typeof inc.enabled !== 'undefined') settings.payments.meshulam.enabled = !!inc.enabled;
     if (typeof inc.apiUrl === 'string') settings.payments.meshulam.apiUrl = inc.apiUrl.trim();
     if (typeof inc.approveUrl === 'string') settings.payments.meshulam.approveUrl = inc.approveUrl.trim();
+    if (typeof inc.pageType === 'string') settings.payments.meshulam.pageType = inc.pageType.trim();
     if (typeof inc.pageCode === 'string') settings.payments.meshulam.pageCode = inc.pageCode.trim();
     if (typeof inc.userId === 'string') settings.payments.meshulam.userId = inc.userId.trim();
     if (typeof inc.apiKey === 'string') settings.payments.meshulam.apiKey = inc.apiKey === '***' ? prevKey : inc.apiKey.trim();
