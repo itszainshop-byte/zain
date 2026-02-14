@@ -14,14 +14,14 @@ function ensureFormData() {
 
 function pickPaymentUrl(data) {
   const candidates = [
-    data?.resultData?.lightboxUrl,
-    data?.data?.lightboxUrl,
-    data?.lightboxUrl,
     data?.resultData?.url,
     data?.resultData?.redirectUrl,
+    data?.resultData?.lightboxUrl,
     data?.data?.url,
     data?.data?.redirectUrl,
+    data?.data?.lightboxUrl,
     data?.redirectUrl,
+    data?.lightboxUrl,
     data?.url
   ].filter((v) => typeof v === 'string');
   for (const u of candidates) {

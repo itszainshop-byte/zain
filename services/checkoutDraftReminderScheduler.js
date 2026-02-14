@@ -13,6 +13,11 @@ const envTwilio = {
   messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID || ''
 };
 
+// Default country code to rewrite local numbers (e.g. 059 -> +97259)
+const DEFAULT_WHATSAPP_COUNTRY_CODE = (process.env.TWILIO_DEFAULT_COUNTRY_CODE || process.env.DEFAULT_COUNTRY_CODE || '972')
+  .replace(/\D/g, '')
+  .trim();
+
 let timer = null;
 let cachedSettings = null;
 let cachedAt = 0;
@@ -53,8 +58,24 @@ const buildWhatsappLink = (phone, message) => {
 
 const normalizeE164 = (phone) => {
   const raw = String(phone || '').trim();
-  const digits = raw.replace(/\D/g, '');
+  let digits = raw.replace(/\D/g, '');
   if (!digits) return '';
+
+  // Remove leading 00 (international dial prefix) if present
+  if (digits.startsWith('00')) {
+    digits = digits.slice(2);
+  }
+
+  // If already starts with default country code (e.g. 972...), trust it
+  if (DEFAULT_WHATSAPP_COUNTRY_CODE && digits.startsWith(DEFAULT_WHATSAPP_COUNTRY_CODE)) {
+    return `+${digits}`;
+  }
+
+  // Convert local numbers that start with a leading 0 to E.164 using default country
+  if (DEFAULT_WHATSAPP_COUNTRY_CODE && digits.startsWith('0')) {
+    return `+${DEFAULT_WHATSAPP_COUNTRY_CODE}${digits.slice(1)}`;
+  }
+
   return `+${digits}`;
 };
 

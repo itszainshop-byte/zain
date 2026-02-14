@@ -10,6 +10,11 @@ const envTwilio = {
   messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID || ''
 };
 
+// Default country code to rewrite local numbers (e.g. 059 -> +97259)
+const DEFAULT_WHATSAPP_COUNTRY_CODE = (process.env.TWILIO_DEFAULT_COUNTRY_CODE || process.env.DEFAULT_COUNTRY_CODE || '972')
+  .replace(/\D/g, '')
+  .trim();
+
 const resolveName = (draft) => {
   const contactName = draft?.contact?.name || `${draft?.contact?.firstName || ''} ${draft?.contact?.lastName || ''}`.trim();
   if (contactName) return contactName;
@@ -38,8 +43,24 @@ const buildWhatsappLink = (phone, message) => {
 
 const normalizeE164 = (phone) => {
   const raw = String(phone || '').trim();
-  const digits = raw.replace(/\D/g, '');
+  let digits = raw.replace(/\D/g, '');
   if (!digits) return '';
+
+  // Remove leading 00 (international dial prefix) if present
+  if (digits.startsWith('00')) {
+    digits = digits.slice(2);
+  }
+
+  // If already starts with default country code (e.g. 972...), trust it
+  if (DEFAULT_WHATSAPP_COUNTRY_CODE && digits.startsWith(DEFAULT_WHATSAPP_COUNTRY_CODE)) {
+    return `+${digits}`;
+  }
+
+  // Convert local numbers that start with a leading 0 to E.164 using default country
+  if (DEFAULT_WHATSAPP_COUNTRY_CODE && digits.startsWith('0')) {
+    return `+${DEFAULT_WHATSAPP_COUNTRY_CODE}${digits.slice(1)}`;
+  }
+
   return `+${digits}`;
 };
 
@@ -274,10 +295,17 @@ export const sendCheckoutDraftReminder = async (req, res) => {
 
     return res.json({ ok: true, sid: result?.sid || null, to, message: body });
   } catch (error) {
-    const twilioMsg = error?.response?.data?.message || error?.response?.data?.more_info;
+    const twilioData = error?.response?.data || {};
+    const status = error?.response?.status || 500;
+    const twilioMsg = twilioData?.message || twilioData?.more_info;
+    const twilioCode = twilioData?.code || twilioData?.error_code;
     const detail = twilioMsg || error?.message || 'Unknown error';
-    console.error('sendCheckoutDraftReminder failed', detail, error?.response?.data || error);
-    return res.status(500).json({ message: `Failed to send reminder: ${detail}` });
+    console.error('sendCheckoutDraftReminder failed', { status, twilioCode, detail, twilioData });
+    return res.status(status).json({
+      message: `Failed to send reminder: ${detail}`,
+      code: twilioCode || null,
+      status
+    });
   }
 };
 
