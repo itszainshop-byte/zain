@@ -274,8 +274,10 @@ export const sendCheckoutDraftReminder = async (req, res) => {
 
     return res.json({ ok: true, sid: result?.sid || null, to, message: body });
   } catch (error) {
-    console.error('sendCheckoutDraftReminder failed', error?.response?.data || error);
-    return res.status(500).json({ message: 'Failed to send reminder' });
+    const twilioMsg = error?.response?.data?.message || error?.response?.data?.more_info;
+    const detail = twilioMsg || error?.message || 'Unknown error';
+    console.error('sendCheckoutDraftReminder failed', detail, error?.response?.data || error);
+    return res.status(500).json({ message: `Failed to send reminder: ${detail}` });
   }
 };
 
