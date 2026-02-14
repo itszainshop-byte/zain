@@ -200,7 +200,20 @@ export function startCheckoutDraftReminderScheduler() {
 
           console.log('[reminder] WhatsApp sent via Twilio', { id: draft._id, sid: result?.sid || '' });
         } catch (e) {
-          console.warn('[reminder] Failed to process draft', draft?._id, e?.message || e);
+          const twilioData = e?.response?.data || {};
+          const status = e?.response?.status || null;
+          const twilioMsg = twilioData?.message || twilioData?.more_info;
+          const twilioCode = twilioData?.code || twilioData?.error_code;
+          const detail = twilioMsg || e?.message || 'Unknown error';
+          console.warn('[reminder] Failed to process draft', {
+            id: draft?._id,
+            status,
+            twilioCode,
+            detail,
+            to: normalizeWhatsAppAddress(resolvePhone(draft)),
+            hasFrom: !!from,
+            hasMessagingServiceSid: !!messagingServiceSid
+          });
         }
       }
     } catch (e) {
