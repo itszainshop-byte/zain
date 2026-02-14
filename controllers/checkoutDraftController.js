@@ -27,7 +27,22 @@ const resolvePhone = (draft) => {
 };
 
 const buildMessage = (template, name, discountCode, checkoutUrl) => {
-  const fallback = 'Hi {{name}}, we saved your checkout details. Use code {{discountCode}} to finish here: {{checkoutUrl}}';
+  const fallback = [
+    'היי {{name}} 👋',
+    '',
+    'שמנו לב שהתחלת הזמנה אבל לא השלמת אותה 🛒',
+    'רק רצינו להזכיר לך – העגלה שלך עדיין מחכה ⏱️',
+    '',
+    '🎁 אם תסיים את ההזמנה עכשיו, תקבל:',
+    '🚚 משלוח מהיר עד דלת הבית – מתנה',
+    '💸 בנוסף, תוכל להשתמש בקוד {{discountCode}} ולקבל 10% הנחה על ההזמנה שלך',
+    '',
+    '⏳ המוצרים שמורים עבורך והקישור עדיין פעיל 👇',
+    '{{checkoutUrl}}',
+    '',
+    'יש שאלה או משהו לא ברור?',
+    'אני כאן בשבילך 😊'
+  ].join('\n');
   const msg = (template && String(template).trim()) ? template : fallback;
   return msg
     .replace(/\{\{name\}\}/g, name || 'Guest')
